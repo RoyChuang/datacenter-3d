@@ -15,7 +15,10 @@ sites/<案場id>/
   plan.png      平面圖（png / jpg / webp）
   site.yaml     複製 sites/dc-1f/site.yaml 改
   devices.json  （選用）真實的機櫃內容，有的話會取代假資料
+  notes.md      判讀紀錄：比例怎麼量的、圖例怎麼解讀、哪些已確認、哪些還是假設
 ```
+
+`notes.md` 參考 [sites/dc-1f/notes.md](../sites/dc-1f/notes.md)。每次和使用者確認過的答案都要更新進去。
 
 `<案場id>` 只用英數和 `-`，且要和 `site.yaml` 裡的 `id` 相同。
 
@@ -41,6 +44,7 @@ sites/<案場id>/
 > 用 `sites/dc-1f/site.yaml` 當範例。只輸出排與順序，不要逐台估座標。
 > 看不懂的圖例、無法確定的朝向，先列成問題問我。
 > 完成後執行 `npm run sites`，修正所有 ✖ 錯誤，並在回報中列出所有 ⚠ 警告。
+> 把判讀依據、已確認和尚未確認的假設寫進 `sites/<id>/notes.md`。
 
 ## 3. 編譯與驗證
 

@@ -14,6 +14,7 @@ npm run build      # 正式打包（驗證失敗會中止）
 ## 新增案場
 
 照 [docs/workflow.md](docs/workflow.md) 的流程做，格式說明在 [docs/site-format.md](docs/site-format.md)。
+設計理由、驗證狀態、已知限制記錄在 [docs/design-notes.md](docs/design-notes.md)。
 
 ## 結構
 
@@ -22,6 +23,7 @@ sites/<id>/
   site.yaml             ← 唯一手動維護的檔案
   plan.png              原始平面圖（疊圖比對用）
   devices.json          （選用）真實機櫃內容
+  notes.md              判讀紀錄（假設與已確認事項）
 scripts/
   site-compiler.mjs     site.yaml → JSON，並做驗證（重疊、重複、範圍、編號）
   build-sites.mjs       編譯所有案場，輸出到 src/generated/（不進版控）
