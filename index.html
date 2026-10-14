@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>機房 3D</title>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="toolbar" class="hud">
+      <div class="hud-title">機房 1F</div>
+      <div class="btn-row">
+        <button data-view="persp">透視</button>
+        <button data-view="top">俯視</button>
+      </div>
+      <label><input type="checkbox" data-layer="walls" checked /> 牆體 / 門</label>
+      <label><input type="checkbox" data-layer="containment" checked /> 封閉通道頂板</label>
+      <label><input type="checkbox" data-layer="sensors" checked /> 溫濕度感測器</label>
+      <label><input type="checkbox" data-layer="cameras" checked /> 攝影機</label>
+    </div>
+
+    <aside id="panel" class="hud hidden"></aside>
+    <div id="tooltip" class="hidden"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

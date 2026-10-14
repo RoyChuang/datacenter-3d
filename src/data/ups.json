@@ -1,0 +1,26 @@
+[
+  {
+    "id": "UPS2",
+    "x": 8.23,
+    "z": 10.12,
+    "width": 0.58,
+    "facing": "south",
+    "capacityKVA": 200
+  },
+  {
+    "id": "UPS1",
+    "x": 8.85,
+    "z": 10.12,
+    "width": 0.58,
+    "facing": "south",
+    "capacityKVA": 200
+  },
+  {
+    "id": "UPS0",
+    "x": 9.47,
+    "z": 10.12,
+    "width": 0.58,
+    "facing": "south",
+    "capacityKVA": 200
+  }
+]

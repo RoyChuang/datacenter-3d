@@ -1,0 +1,30 @@
+{
+  "rack": {
+    "uSize": 0.04445,
+    "plinth": 0.065,
+    "depth": 1.2,
+    "defaultWidth": 0.6,
+    "defaultUHeight": 42,
+    "color": "#2b2f36"
+  },
+  "rowcool": {
+    "height": 2,
+    "depth": 1.2,
+    "color": "#38b6e8"
+  },
+  "pdc": {
+    "height": 2,
+    "depth": 1.2,
+    "color": "#3d5bd9"
+  },
+  "ups": {
+    "height": 1.9,
+    "depth": 1,
+    "color": "#3d5bd9"
+  },
+  "battery": {
+    "height": 1.9,
+    "depth": 1,
+    "color": "#3d5bd9"
+  }
+}
