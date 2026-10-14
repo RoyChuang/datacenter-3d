@@ -9,7 +9,8 @@
     <div id="app"></div>
 
     <div id="toolbar" class="hud">
-      <div class="hud-title">機房 1F</div>
+      <div class="hud-title"></div>
+      <select id="site-select" class="hidden"></select>
       <div class="btn-row">
         <button data-view="persp">透視</button>
         <button data-view="top">俯視</button>
@@ -18,6 +19,7 @@
       <label><input type="checkbox" data-layer="containment" checked /> 封閉通道頂板</label>
       <label><input type="checkbox" data-layer="sensors" checked /> 溫濕度感測器</label>
       <label><input type="checkbox" data-layer="cameras" checked /> 攝影機</label>
+      <label><input type="checkbox" data-layer="plan" /> 平面圖疊圖（比對用）</label>
     </div>
 
     <aside id="panel" class="hud hidden"></aside>

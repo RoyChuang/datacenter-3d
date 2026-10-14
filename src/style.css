@@ -47,3 +47,7 @@ label { cursor: pointer; user-select: none; }
   position: fixed; pointer-events: none; padding: 3px 8px; border-radius: 4px;
   background: rgba(0, 0, 0, 0.8); font-size: 12px; transform: translate(12px, 12px);
 }
+select {
+  background: #1d3459; color: inherit; border: 1px solid #36598f;
+  border-radius: 5px; padding: 4px 6px; font: inherit; margin-bottom: 4px;
+}

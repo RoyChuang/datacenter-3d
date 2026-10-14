@@ -1,0 +1,120 @@
+# 案場描述檔（唯一需要手動維護的檔案）
+# 位置一律用「地板格」為單位（原點 = 平面圖左上角，x 往右、z 往下）
+# 設備尺寸一律用 mm
+# 格式說明見 docs/site-format.md
+
+id: dc-1f
+name: 機房 1F
+
+grid:
+  tileSize: 600        # mm
+  cols: 33             # 房間寬（格）
+  rows: 22.5           # 房間深（格）
+
+plan:
+  image: plan.png
+  pxPerTile: 31        # 平面圖上一格幾個像素
+  originPx: [0, 0]     # 格座標 (0,0) 在圖上的像素位置
+
+wallHeight: 2600
+perimeter: true        # 自動產生外牆
+mockDevices: true      # 機櫃內容先用假資料
+
+# ---------- 牆：[x1, z1, x2, z2]，門會自動把牆切開 ----------
+walls:
+  - [16.28, 0, 16.62, 22.5]       # 走廊西牆
+  - [19.28, 0, 19.62, 22.5]       # 走廊東牆
+  - [8.8, 15.62, 16.28, 16.03]    # UPS 室北牆
+  - [8.8, 16.03, 9.17, 22.5]      # UPS 室西牆
+  - [3.58, 0, 3.75, 1.87]         # A 通道北側隔間
+  - [5.75, 0, 5.92, 1.87]
+  - [10.82, 0, 10.98, 1.87]       # B 通道北側隔間
+  - [12.77, 0, 12.93, 1.87]
+  - [19.62, 15.42, 20.8, 17.42]   # D9 左側實牆
+  - [29.13, 15.42, 31.45, 17.42]  # D15 右側實牆
+
+doors:
+  - { id: DR-C1-N, rect: [16.28, 1.93, 16.62, 4.03] }
+  - { id: DR-C1-S, rect: [16.28, 18.38, 16.62, 20.48] }
+  - { id: DR-C2-N, rect: [19.28, 1.93, 19.62, 4.03] }
+  - { id: DR-C2-S, rect: [19.28, 18.38, 19.62, 20.48] }
+  - { id: DR-P,    rect: [8.8, 21.35, 9.17, 22.5] }
+  - { id: DR-MAIN, rect: [5.17, 22.5, 8.72, 22.83] }
+  - { id: GL-A1, kind: glass, rect: [3.58, 1.87, 3.75, 4] }
+  - { id: GL-A2, kind: glass, rect: [5.75, 1.87, 5.92, 4] }
+  - { id: GL-B1, kind: glass, rect: [10.82, 1.87, 10.98, 4] }
+  - { id: GL-B2, kind: glass, rect: [12.77, 1.87, 12.93, 4] }
+
+# ---------- 設備排：依序排列，系統自動算每台座標 ----------
+# axis: 排的延伸方向；line: 排的中心線；from: 第一台的起點邊緣；facing: 正面朝向
+rows:
+  - { id: A-W, axis: z, line: 2.75, from: 4, facing: east, widths: { rowcool: 600 },
+      units: [A1, A2, A3, R3, A4, A5, A6, A7, R1, A8, A9, A10, PDC1] }
+  - { id: A-E, axis: z, line: 6.75, from: 4, facing: west, widths: { rowcool: 600 },
+      units: [A11, A12, A13, R4, A14, A15, A16, A17, R2, A18, A19, A20, PDC2] }
+
+  - { id: B-W, axis: z, line: 9.9, from: 4, facing: east,
+      units: [B1, B2, R7, B3, B4, R5, B5, B6, PDC3] }
+  - { id: B-E, axis: z, line: 13.85, from: 4, facing: west,
+      units: [B7, B8, R8, B9, B10, R6, B11, B12, PDC4] }
+
+  - { id: C-N, axis: x, line: 4.87, from: 20.8, facing: south,
+      units: [C1, C2, C3, R11, C4, C5, C6, R12, C7, C8, PDC5] }
+  - { id: C-S, axis: x, line: 8.17, from: 20.8, facing: north,
+      units: [C9, C10, C11, R9, C12, C13, C14, R10, C15, C16, PDC6] }
+
+  - { id: D-N, axis: x, line: 12.15, from: 20.8, facing: south,
+      units: [D1, D2, D3, R15, D4, D5, D6, R16, D7, D8, PDC7] }
+  - { id: D-S, axis: x, line: 16.42, from: 20.8, facing: north,
+      units: [D9, D10, D11, R13, D12, D13, D14, R14, D15] }
+
+  - { id: PWR-N, axis: x, line: 16.87, from: 11.12, facing: south,
+      units: [BATT-1, BATT-2, UPS2, UPS1, UPS0] }
+  - { id: PWR-W, axis: z, line: 10.17, from: 18.1, facing: east, widths: { battery: 500 },
+      units: [BATT-3, BATT-4, BATT-5, BATT-6] }
+
+# 個別設備的寬度覆寫（mm）
+widths: { B3: 800, B4: 800, B5: 800, B6: 800, B9: 800, B10: 800, B11: 800, B12: 800,
+          C1: 800, C9: 800, D1: 800, D9: 800 }
+
+# 個別設備的附加屬性（原樣帶到詳情面板）
+props:
+  UPS0: { capacityKVA: 200 }
+  UPS1: { capacityKVA: 200 }
+  UPS2: { capacityKVA: 200 }
+  BATT-1: { ups: UPS2 }
+  BATT-2: { ups: UPS2 }
+  BATT-3: { ups: UPS1 }
+  BATT-4: { ups: UPS1 }
+  BATT-5: { ups: UPS0 }
+  BATT-6: { ups: UPS0 }
+
+# ---------- 封閉通道：指定兩排，系統自動算出通道範圍與端門 ----------
+aisles:
+  - { id: AISLE-A, between: [A-W, A-E], doors: [end] }
+  - { id: AISLE-B, between: [B-W, B-E], doors: [end] }
+  - { id: AISLE-C, between: [C-N, C-S], doors: [start, end] }
+  - { id: AISLE-D, between: [D-N, D-S], doors: [start, end] }
+
+# ---------- 點位 ----------
+points:
+  - type: sensor
+    prefix: TH
+    height: 1600
+    at: [
+        [5.00, 3.26], [4.03, 4.52], [5.26, 4.52], [4.03, 5.48], [5.26, 5.48], [4.03, 9.48],
+        [5.26, 9.48], [4.03, 10.48], [5.26, 10.48], [4.03, 14.68], [5.26, 14.68], [4.03, 15.68],
+        [5.26, 15.68], [12.19, 2.26], [11.23, 4.52], [12.45, 4.52], [11.23, 12.10], [12.45, 12.10],
+        [21.45, 3.58], [22.71, 3.58], [26.29, 3.58], [29.84, 3.58], [26.52, 6.35], [21.45, 9.58],
+        [22.71, 9.58], [26.29, 9.58], [29.84, 9.58], [21.45, 10.77], [22.71, 10.77], [26.29, 10.77],
+        [29.84, 10.77], [26.52, 13.55], [21.45, 17.74], [22.71, 17.74], [26.29, 17.74], [14.71, 18.39],
+        [11.68, 19.35],
+      ]
+  - type: camera
+    prefix: CAM
+    height: 2500
+    at: [
+        [0.90, 1.45], [8.23, 1.45], [15.35, 0.90], [18.00, 2.45], [4.68, 16.61], [11.84, 13.16],
+        [9.68, 19.42], [17.84, 21.87], [0.48, 20.84], [32.58, 2.32], [32.65, 3.23], [30.87, 6.55],
+        [20.16, 10.19], [30.94, 14.29], [20.06, 15.00], [32.42, 19.74],
+      ]
