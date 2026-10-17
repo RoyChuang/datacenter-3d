@@ -8,6 +8,8 @@ export const DEFAULT_TYPES = {
   pdc: { width: 600, depth: 1200, height: 2000, color: '#cfd4da' },
   ups: { width: 600, depth: 1000, height: 1900, color: '#d6dade' },
   battery: { width: 600, depth: 1000, height: 1900, color: '#cfd4da' },
+  // wall-mounted distribution board; `mount` = height of its bottom edge
+  panel: { width: 600, depth: 250, height: 900, mount: 900, color: '#cfd4da' },
 };
 
 export const DEFAULT_TYPE_RULES = [
@@ -15,10 +17,12 @@ export const DEFAULT_TYPE_RULES = [
   { match: '^R\\d', type: 'rowcool' },
   { match: '^UPS', type: 'ups' },
   { match: '^BATT', type: 'battery' },
+  { match: '^ACP', type: 'panel' },
   { match: '.*', type: 'rack' },
 ];
 
-const OUTPUT_FOR_TYPE = { rack: 'racks', rowcool: 'rowcools', pdc: 'pdcs', ups: 'ups', battery: 'batteries' };
+const OUTPUT_FOR_TYPE = { rack: 'racks', rowcool: 'rowcools', pdc: 'pdcs', ups: 'ups', battery: 'batteries', panel: 'panels' };
+const POWER_PATHS = ['A', 'B'];
 const PERIMETER_THICKNESS = 0.2; // m
 const AISLE_DOOR_THICKNESS = 0.1; // m
 const EPS = 0.005; // m — overlaps smaller than this are ignored
@@ -156,6 +160,8 @@ export function compileSite(site, { devices: realDevices } = {}) {
     if (missing.length) warnings.push(`編號不連續，缺少：${missing.join(', ')}`);
   }
 
+  const power = site.power ? compilePower(site.power, equipment, errors, warnings) : null;
+
   // ---------- outputs ----------
   const strip = ({ type, depth: _d, ...rest }) => rest;
   const byType = Object.fromEntries(Object.values(OUTPUT_FOR_TYPE).map((k) => [k, []]));
@@ -176,10 +182,75 @@ export function compileSite(site, { devices: realDevices } = {}) {
     ...byType,
     'rack-devices': rackDevices,
     points,
+    ...(power ? { power } : {}),
   };
 
-  const stats = { ...Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.length])), points: points.length, walls: walls.length, doors: doors.length };
+  const stats = { ...Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.length])), points: points.length, walls: walls.length, doors: doors.length, ...(power ? { feeds: power.edges.length } : {}) };
   return { files, errors, warnings, stats };
+}
+
+// Power topology: feeds become directed edges on path A or B; batteries are linked to their UPS (DC).
+function compilePower(power, equipment, errors, warnings) {
+  const byId = new Map(equipment.map((e) => [e.id, e]));
+  const external = new Set(power.external ?? []);
+  const known = (id) => byId.has(id) || external.has(id);
+  const edges = [];
+  const feeders = new Map(); // id -> [{ from, path }]
+
+  for (const feed of power.feeds ?? []) {
+    if (!POWER_PATHS.includes(feed.path)) { errors.push(`power.feeds: path 必須是 ${POWER_PATHS.join(' / ')}（${feed.from}）`); continue; }
+    if (!known(feed.from)) { errors.push(`power.feeds: 找不到 ${feed.from}`); continue; }
+    for (const to of [].concat(feed.to)) {
+      if (!byId.has(to)) { errors.push(`power.feeds: 找不到 ${to}（上游 ${feed.from}）`); continue; }
+      edges.push({ id: `${feed.from}>${to}`, kind: 'ac', path: feed.path, from: feed.from, to });
+      if (!feeders.has(to)) feeders.set(to, []);
+      feeders.get(to).push({ from: feed.from, path: feed.path });
+    }
+  }
+
+  // A loop would make "trace upstream" run forever, so reject it here.
+  const visiting = new Set();
+  const done = new Set();
+  const visit = (id) => {
+    if (done.has(id)) return;
+    if (visiting.has(id)) { errors.push(`power.feeds: 供電迴圈經過 ${id}`); return; }
+    visiting.add(id);
+    for (const f of feeders.get(id) ?? []) visit(f.from);
+    visiting.delete(id);
+    done.add(id);
+  };
+  for (const id of feeders.keys()) visit(id);
+
+  // Batteries feed the UPS named in their props, as long as that UPS is part of the topology.
+  const inTopology = new Set(edges.flatMap((e) => [e.from, e.to]));
+  for (const b of equipment.filter((e) => e.type === 'battery' && e.ups)) {
+    if (inTopology.has(b.ups)) edges.push({ id: `${b.id}>${b.ups}`, kind: 'dc', path: null, from: b.id, to: b.ups });
+  }
+
+  const redundancy = [];
+  for (const [a, b] of power.redundancy ?? []) {
+    if (!byId.has(a) || !byId.has(b)) { errors.push(`power.redundancy: 找不到 ${byId.has(a) ? b : a}`); continue; }
+    const pa = feeders.get(a)?.map((f) => f.path) ?? [];
+    const pb = feeders.get(b)?.map((f) => f.path) ?? [];
+    if (pa.some((p) => pb.includes(p))) warnings.push(`power.redundancy: ${a} 和 ${b} 有同一路供電，不是真正的雙路備援`);
+    redundancy.push([a, b]);
+  }
+  const paired = new Set(redundancy.flat());
+  const singleFeed = [...feeders.keys()].filter((id) => byId.get(id).type === 'pdc' && !paired.has(id) && feeders.get(id).length < 2);
+
+  // serves: which racks each feeder supplies, given as row ids or rack ids.
+  const serves = {};
+  for (const [id, targets] of Object.entries(power.serves ?? {})) {
+    if (!byId.has(id)) { warnings.push(`power.serves.${id}：沒有這台設備`); continue; }
+    serves[id] = [];
+    for (const t of targets) {
+      const racks = equipment.filter((e) => e.type === 'rack' && (e.row === t || e.id === t)).map((e) => e.id);
+      if (!racks.length) warnings.push(`power.serves.${id}：${t} 沒有對應的排或機櫃`);
+      serves[id].push(...racks);
+    }
+  }
+
+  return { external: [...external], edges, redundancy, singleFeed, serves, servesAssumed: !!power.servesAssumed };
 }
 
 function cutWall(wall, door) {
@@ -219,7 +290,7 @@ function runtimeTypes(types) {
   for (const [name, t] of Object.entries(types)) {
     out[name] = name === 'rack'
       ? { uSize: t.uSize / 1000, plinth: t.plinth / 1000, depth: t.depth / 1000, defaultWidth: t.width / 1000, defaultUHeight: t.uHeight, color: t.color }
-      : { height: t.height / 1000, depth: t.depth / 1000, color: t.color };
+      : { height: t.height / 1000, depth: t.depth / 1000, color: t.color, ...(t.mount ? { mount: t.mount / 1000 } : {}) };
   }
   return out;
 }

@@ -80,14 +80,38 @@ widths: { B3: 800, B4: 800, B5: 800, B6: 800, B9: 800, B10: 800, B11: 800, B12: 
 # 個別設備的附加屬性（原樣帶到詳情面板）
 props:
   UPS0: { capacityKVA: 200 }
-  UPS1: { capacityKVA: 200 }
-  UPS2: { capacityKVA: 200 }
+  UPS1: { capacityKVA: 200, alias: UPS-A }
+  UPS2: { capacityKVA: 200, alias: UPS-B }
   BATT-1: { ups: UPS2 }
   BATT-2: { ups: UPS2 }
   BATT-3: { ups: UPS1 }
   BATT-4: { ups: UPS1 }
   BATT-5: { ups: UPS0 }
   BATT-6: { ups: UPS0 }
+
+# 不屬於任何一排的單獨設備
+equipment:
+  - { id: ACP-1, at: [17.27, 0.21], facing: south }   # 走廊北牆的壁掛配電箱
+  - { id: ACP-2, at: [18.63, 0.21], facing: south }
+
+# ---------- 電力拓樸 ----------
+power:
+  external: [EMP1-1, EMP1-2]          # 不在平面圖上的上游電表，3D 只顯示標籤
+  feeds:
+    - { path: A, from: EMP1-1, to: UPS1 }
+    - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7, ACP-1] }
+    - { path: B, from: EMP1-2, to: UPS2 }
+    - { path: B, from: UPS2, to: [PDC2, PDC4, PDC6, ACP-2] }
+  redundancy: [[PDC1, PDC2], [PDC3, PDC4], [PDC5, PDC6]]   # PDC7 單路，沒有備援
+  servesAssumed: true                  # 推定：排尾的 PDC 供電給該區的排，待真實迴路資料取代
+  serves:
+    PDC1: [A-W, A-E]
+    PDC2: [A-W, A-E]
+    PDC3: [B-W, B-E]
+    PDC4: [B-W, B-E]
+    PDC5: [C-N, C-S]
+    PDC6: [C-N, C-S]
+    PDC7: [D-N, D-S]
 
 # ---------- 封閉通道：指定兩排，系統自動算出通道範圍與端門 ----------
 aisles:

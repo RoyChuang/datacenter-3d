@@ -6,10 +6,12 @@ const KIND_LABEL = {
   pdc: '配電櫃 PDC',
   ups: 'UPS',
   battery: '電池櫃',
+  panel: '壁掛配電箱',
   sensor: '溫濕度感測器',
   camera: '攝影機',
 };
 
+const show = (v, unit = '') => (v === undefined || v === null || v === '' ? '—' : `${v}${unit}`);
 const rows = (pairs) =>
   `<table>${pairs.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
 
@@ -54,27 +56,28 @@ function body(pick) {
       ]);
     }
     case 'ups':
-      return rows([['位置', pos], ['容量', `${d.capacityKVA} kVA`], ['狀態', '<span class="badge ok">ONLINE</span>']]);
+      return rows([['位置', pos], ...(d.alias ? [['名稱', d.alias]] : []), ['容量', show(d.capacityKVA, ' kVA')], ['狀態', '<span class="badge ok">ONLINE</span>']]);
     case 'battery':
-      return rows([['位置', pos], ['供電 UPS', d.ups]]);
+      return rows([['位置', pos], ['供電 UPS', show(d.ups)]]);
     default:
       return rows([['位置', pos], ...(d.row ? [['排', d.row]] : []), ...(d.facing ? [['朝向', d.facing]] : [])]);
   }
 }
 
-export function createPanel(el, { onClose }) {
+// `extra(pick)` may return HTML shown above the details (e.g. the power section).
+export function createPanel(el, { onClose, extra }) {
   let current = null;
-  function show(pick) {
+  function render(pick) {
     current = pick;
     el.classList.toggle('hidden', !pick);
     if (!pick) return;
     el.innerHTML = `<button class="close" title="關閉">×</button>` +
-      `<h2>${pick.data.id}</h2><div class="kind">${KIND_LABEL[pick.kind] ?? pick.kind}</div>${body(pick)}`;
+      `<h2>${pick.data.id}</h2><div class="kind">${KIND_LABEL[pick.kind] ?? pick.kind}</div>${extra?.(pick) ?? ''}${body(pick)}`;
     el.querySelector('.close').onclick = onClose;
   }
   // Re-render only if the given pick is what is on screen (used for live updates).
   function refresh(pick) {
-    if (pick === current) show(pick);
+    if (pick === current) render(pick);
   }
-  return { show, refresh };
+  return { show: render, refresh, get current() { return current; } };
 }

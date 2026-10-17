@@ -36,6 +36,7 @@ rows:
 | `R` + 數字 | rowcool 列間空調 | 300 × 1200 × 2000 |
 | `UPS` | ups | 600 × 1000 × 1900 |
 | `BATT` | battery 電池櫃 | 600 × 1000 × 1900 |
+| `ACP` | panel 壁掛配電箱 | 600 × 250 × 900，離地 900 |
 | 其他 | rack 機櫃 | 600 × 1200，42U |
 
 規則和尺寸都可以在 site.yaml 覆寫：
@@ -79,6 +80,33 @@ points:
 ```
 
 編號會依序自動產生，例如 `TH-01`、`TH-02`。
+
+## power：電力拓樸（選用）
+
+```yaml
+power:
+  external: [EMP1-1, EMP1-2]       # 不在平面圖上的上游設備，3D 只顯示來源標籤
+  feeds:
+    - { path: A, from: EMP1-1, to: UPS1 }
+    - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7, ACP-1] }
+    - { path: B, from: EMP1-2, to: UPS2 }
+    - { path: B, from: UPS2, to: [PDC2, PDC4, PDC6, ACP-2] }
+  redundancy: [[PDC1, PDC2], [PDC3, PDC4]]   # 互為備援的兩台
+  serves:                                     # 每台設備供電給哪些機櫃：排名稱或機櫃編號
+    PDC1: [A-W, A-E]
+  servesAssumed: true                         # 供電範圍是推定的（面板會標示「推定」）
+```
+
+| 欄位 | 說明 |
+|---|---|
+| `path` | `A` 或 `B`，決定線的顏色（藍 / 橙） |
+| `from` / `to` | 設備編號；`to` 可以是清單。`external` 裡的編號可以當 `from` |
+| `redundancy` | 備援配對。PDC 有供電但不在任何配對裡，會標成「單路」 |
+| `serves` | 推算機櫃的供電來源；UPS 會自動彙總下游 PDC 的範圍 |
+
+電池櫃的 `props.ups` 會自動畫成到該 UPS 的直流線（只限出現在拓樸裡的 UPS）。
+
+編譯時會檢查：找不到的編號、`path` 寫錯、供電迴圈（錯誤）；備援的兩台走同一路、`serves` 對不到機櫃（警告）。
 
 ## devices.json（選用，真實機櫃內容）
 

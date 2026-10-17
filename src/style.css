@@ -59,3 +59,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
   position: fixed; pointer-events: none; padding: 3px 8px; border-radius: 4px;
   background: rgba(31, 41, 51, 0.9); color: #fff; font-size: 12px; transform: translate(12px, 12px);
 }
+
+#power-legend { left: 12px; bottom: 12px; font-size: 12px; }
+.legend-row { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.swatch { width: 18px; height: 4px; border-radius: 2px; }
+.legend-note { color: var(--muted); margin-top: 6px; }
+.section-title { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; margin: 4px 0 4px; }
+.feed { display: inline-block; min-width: 18px; text-align: center; border-radius: 4px; color: #fff; font-weight: 600; font-size: 11px; }
+.feed-A { background: #2563eb; } .feed-B { background: #f97316; }
+.muted { color: var(--muted); font-size: 12px; }
