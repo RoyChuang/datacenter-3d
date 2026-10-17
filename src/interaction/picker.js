@@ -56,8 +56,10 @@ export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect, on
   dom.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY }; });
   dom.addEventListener('pointerup', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) return;
-    select(hitTest(e));
+    const hit = hitTest(e);
+    select(hit && hit === selected ? null : hit); // clicking the selection again deselects it
   });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) select(null); });
   dom.addEventListener('dblclick', (e) => {
     const object = hitTest(e);
     if (object) onFocus?.(object);

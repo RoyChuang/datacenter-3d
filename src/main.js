@@ -102,12 +102,14 @@ function showPower(on) {
   document.getElementById('power-legend').classList.toggle('hidden', !on);
   applyPowerSelection();
 }
+document.getElementById('power-show-all').addEventListener('click', () => picker.select(null));
 // Light up the selected object's power chain, redundant partner and the racks it supplies.
 function applyPowerSelection() {
   for (const id of supplied) setSupplied(units.get(id).group, false);
   supplied = [];
   if (!powerLayer?.group.visible) return;
   const id = picker?.selected?.userData.pick.data.id;
+  document.getElementById('power-show-all').classList.toggle('hidden', !id);
   const racks = id ? powerLayer.highlight(id) : (powerLayer.clear(), null);
   for (const r of racks ?? []) {
     const u = units.get(r);

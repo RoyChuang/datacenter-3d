@@ -70,3 +70,4 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .feed { display: inline-block; min-width: 18px; text-align: center; border-radius: 4px; color: #fff; font-weight: 600; font-size: 11px; }
 .feed-A { background: #2563eb; } .feed-B { background: #f97316; }
 .muted { color: var(--muted); font-size: 12px; }
+#power-show-all { margin-top: 8px; width: 100%; }
