@@ -60,17 +60,17 @@ siteRoot.add(roomGroup);
 
 const equipment = new THREE.Group();
 equipment.name = 'equipment';
-const units = new Map(); // id -> { group, item, top, type } for every piece of equipment
-function addUnit(group, item, top, type) {
-  units.set(item.id, { group, item, top, type });
+const units = new Map(); // id -> { group, item, top } for every piece of equipment
+function addUnit(group, item, top) {
+  units.set(item.id, { group, item, top });
   equipment.add(group);
 }
-for (const r of data.racks) addUnit(buildRack(r, types.rack, data['rack-devices'][r.id]), r, rackHeight(r, types.rack), 'rack');
-for (const c of data.rowcools) addUnit(buildRowcool(c, types.rowcool), c, types.rowcool.height, 'rowcool');
-for (const p of data.pdcs) addUnit(buildPdc(p, types.pdc), p, types.pdc.height, 'pdc');
-for (const u of data.ups) addUnit(buildUps(u, types.ups), u, types.ups.height, 'ups');
-for (const b of data.batteries) addUnit(buildBattery(b, types.battery), b, types.battery.height, 'battery');
-for (const p of data.panels ?? []) addUnit(buildPanel(p, types.panel), p, types.panel.height + (types.panel.mount ?? 0), 'panel');
+for (const r of data.racks) addUnit(buildRack(r, types.rack, data['rack-devices'][r.id]), r, rackHeight(r, types.rack));
+for (const c of data.rowcools) addUnit(buildRowcool(c, types.rowcool), c, types.rowcool.height);
+for (const p of data.pdcs) addUnit(buildPdc(p, types.pdc), p, types.pdc.height);
+for (const u of data.ups) addUnit(buildUps(u, types.ups), u, types.ups.height);
+for (const b of data.batteries) addUnit(buildBattery(b, types.battery), b, types.battery.height);
+for (const p of data.panels ?? []) addUnit(buildPanel(p, types.panel), p, types.panel.height + (types.panel.mount ?? 0));
 siteRoot.add(equipment);
 
 const pointSet = buildPoints(data.points);
@@ -90,7 +90,6 @@ const powerLayer = data.power && buildPowerLayer(data.power, {
   },
   labelOf: (id) => units.get(id)?.item.alias ?? id,
   itemOf: (id) => units.get(id)?.item,
-  kindOf: (id) => units.get(id)?.type,
 });
 // Run `step` while `object` is visible, at ~30 fps: smooth enough for moving dashes and arrows,
 // and it keeps frames coming only while such a layer is shown.
@@ -299,6 +298,9 @@ document.querySelectorAll('[data-layer]').forEach((input) => {
   const name = input.dataset.layer;
   const layer = layers[name];
   if (!layer) { input.closest('label').classList.add('hidden'); return; }
+  // Browsers restore checkbox state on reload; start from the page's defaults so a box can never be
+  // ticked while its view was not actually switched on.
+  input.checked = input.defaultChecked;
   layer.visible = input.checked;
   input.addEventListener('change', () => {
     if (input.checked && ANALYSIS[name]) {

@@ -56,9 +56,8 @@ function route(from, to, h) {
  * @param anchorOf id -> Vector3 (top centre of the equipment, site coordinates) or null
  * @param labelOf  id -> display name (e.g. alias "UPS-A")
  * @param itemOf   id -> compiled equipment item (needs .row for racks)
- * @param kindOf   id -> equipment type ('rack', 'rowcool', ...)
  */
-export function buildPowerLayer(power, { anchorOf, labelOf, itemOf, kindOf }) {
+export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   const group = new THREE.Group();
   group.name = 'power';
   group.visible = false;
@@ -264,10 +263,9 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf, kindOf }) {
     return `<div class="section-title">電力</div><table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
   }
 
-  // Power-related ids (shown solid while the layer is on; everything else is ghosted). Served racks stay
-  // ghosted until selected — there are too many — but served in-row coolers are shown.
+  // Power-related ids (shown solid while the layer is on; everything else is ghosted).
+  // Served racks and in-row coolers stay ghosted until something they hang off is selected.
   const nodes = new Set(power.edges.flatMap((e) => [e.from, e.to]));
-  for (const id of Object.values(power.serves).flat()) if (kindOf(id) !== 'rack') nodes.add(id);
 
   return {
     group,
