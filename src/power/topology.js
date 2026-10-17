@@ -14,9 +14,15 @@ const BADGE_LIFT = { A: 0.55, B: 0.95 };
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
 const TRAY = { A: 2.85, B: 3.1, dc: 2.35 };
 const STUB = 0.9; // external sources come in from above as a short vertical stub
-// PDC -> rack branches: a busway along each row just above the racks, then a drop into every rack.
-// A and B run on opposite sides of the rack top, like the A/B PDUs inside a rack.
-const BRANCH = { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } };
+// Branches: a busway along each row just above the cabinets, then a drop into every unit served.
+// A and B run on opposite sides of the cabinet top, like the A/B PDUs inside a rack. Branches to
+// anything other than racks (e.g. panel -> in-row coolers) sit closer to the centre line and higher,
+// so they never lie on top of a rack busway in the same row.
+const BRANCH = {
+  rack: { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } },
+  // above the 2.6 m walls (panels feed coolers in other rooms), below the 2.85 m A trunk
+  other: { A: { height: 2.65, side: -0.12 }, B: { height: 2.75, side: 0.12 } },
+};
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const pathOf = (edge) => edge.path ?? 'dc';
@@ -56,8 +62,9 @@ function route(from, to, h) {
  * @param anchorOf id -> Vector3 (top centre of the equipment, site coordinates) or null
  * @param labelOf  id -> display name (e.g. alias "UPS-A")
  * @param itemOf   id -> compiled equipment item (needs .row for racks)
+ * @param kindOf   id -> equipment type ('rack', 'rowcool', ...)
  */
-export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
+export function buildPowerLayer(power, { anchorOf, labelOf, itemOf, kindOf }) {
   const group = new THREE.Group();
   group.name = 'power';
   group.visible = false;
@@ -132,7 +139,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     const source = anchorOf(id);
     if (!source || !racks.length) continue;
     const path = (up.get(id) ?? []).find((e) => e.path)?.path ?? 'A';
-    const { height: h, side } = BRANCH[path];
+    const { height: h, side } = BRANCH[racks.every((r) => kindOf(r) === 'rack') ? 'rack' : 'other'][path];
     const segments = [];
     const seg = (a, b) => segments.push(a.x, a.y, a.z, b.x, b.y, b.z);
 
@@ -250,7 +257,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       if (batteries.length) rows.push(['電池', batteries.join('、')]);
       if (partnerOf.has(id)) rows.push(['備援', `2N · ${labelOf(partnerOf.get(id))}`]);
       const racks = servesOf(id);
-      if (racks.length) rows.push(['供電機櫃', `${racks.length} 台${power.servesAssumed ? '（推定）' : ''}`]);
+      if (racks.length) rows.push(['供電範圍', `${racks.length} 台${power.servesAssumed ? '（推定）' : ''}`]);
     } else {
       const feeders = servedBy(id);
       if (!feeders.length) return '';
@@ -258,13 +265,15 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
         const p = (up.get(f) ?? []).find((e) => e.path)?.path;
         return `${p ? `<span class="feed feed-${p}">${p}</span> ` : ''}${labelOf(f)}`;
       }).join('<br>')]);
-      if (power.servesAssumed) rows.push(['', '<span class="muted">依位置推定，尚無迴路資料</span>']);
+      if (power.servesAssumed) rows.push(['', '<span class="muted">推定，尚無迴路資料</span>']);
     }
     return `<div class="section-title">電力</div><table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
   }
 
-  // Power-related ids (shown solid while the layer is on; everything else is ghosted).
+  // Power-related ids (shown solid while the layer is on; everything else is ghosted). Served racks stay
+  // ghosted until selected — there are too many — but other served units (e.g. coolers) are shown.
   const nodes = new Set(power.edges.flatMap((e) => [e.from, e.to]));
+  for (const id of Object.values(power.serves).flat()) if (kindOf(id) !== 'rack') nodes.add(id);
 
   return {
     group,
