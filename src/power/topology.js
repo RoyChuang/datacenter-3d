@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 
 // A / B feed colours (common dual-feed convention), DC battery links in grey, single-feed warning in amber.
 export const PATH_COLORS = { A: 0x2563eb, B: 0xf97316, dc: 0x6b7280 };
@@ -9,6 +11,9 @@ const WARN = '#d97706';
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
 const TRAY = { A: 2.85, B: 3.1, dc: 2.35 };
 const STUB = 0.9; // external sources come in from above as a short vertical stub
+// PDC -> rack branches: a busway along each row just above the racks, then a drop into every rack.
+// A and B run on opposite sides of the rack top, like the A/B PDUs inside a rack.
+const BRANCH = { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } };
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const pathOf = (edge) => edge.path ?? 'dc';
@@ -47,8 +52,9 @@ function route(from, to, h) {
  * @param power    compiled power.json
  * @param anchorOf id -> Vector3 (top centre of the equipment, site coordinates) or null
  * @param labelOf  id -> display name (e.g. alias "UPS-A")
+ * @param itemOf   id -> compiled equipment item (needs .row for racks)
  */
-export function buildPowerLayer(power, { anchorOf, labelOf }) {
+export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   const group = new THREE.Group();
   group.name = 'power';
   group.visible = false;
@@ -108,6 +114,50 @@ export function buildPowerLayer(power, { anchorOf, labelOf }) {
     group.add(badge);
   }
 
+  // ---------- PDC -> rack branches ----------
+  const branches = new Map(); // feeder id -> { base, flow, path }
+  for (const [id, racks] of Object.entries(power.serves)) {
+    const source = anchorOf(id);
+    if (!source || !racks.length) continue;
+    const path = (up.get(id) ?? []).find((e) => e.path)?.path ?? 'A';
+    const { height: h, side } = BRANCH[path];
+    const segments = [];
+    const seg = (a, b) => segments.push(a.x, a.y, a.z, b.x, b.y, b.z);
+
+    const byRow = new Map();
+    for (const r of racks) {
+      const top = anchorOf(r);
+      if (!top) continue;
+      const row = itemOf(r)?.row ?? r;
+      if (!byRow.has(row)) byRow.set(row, []);
+      byRow.get(row).push(top);
+    }
+    for (const tops of byRow.values()) {
+      // Rows run along x or z; the busway sits `side` metres off the rack centre line.
+      const alongZ = Math.max(...tops.map((t) => t.x)) - Math.min(...tops.map((t) => t.x)) < 0.01;
+      const off = alongZ ? new THREE.Vector3(side, 0, 0) : new THREE.Vector3(0, 0, side);
+      const along = (v) => (alongZ ? v.z : v.x);
+      const sorted = [...tops].sort((a, b) => along(a) - along(b));
+      const ends = [sorted[0], sorted[sorted.length - 1]].map((t) => t.clone().add(off).setY(h));
+      // start the busway at the end nearest the PDC
+      if (Math.abs(along(source) - along(ends[1])) < Math.abs(along(source) - along(ends[0]))) ends.reverse();
+      const feed = route(source, ends[0], h);
+      for (let i = 1; i < feed.length; i++) seg(feed[i - 1], feed[i]);
+      seg(ends[0], ends[1]);
+      for (const t of sorted) seg(t.clone().add(off).setY(h), t.clone().add(off));
+    }
+    if (!segments.length) continue;
+    const geometry = new LineSegmentsGeometry().setPositions(segments);
+    const base = new LineSegments2(geometry, new LineMaterial({ color: PATH_COLORS[path], linewidth: 1.6, transparent: true, opacity: 0.6 }));
+    const flow = new LineSegments2(geometry, new LineMaterial({
+      color: 0xffffff, linewidth: 1.2, dashed: true, dashSize: 0.12, gapSize: 0.4, transparent: true, opacity: 0.7,
+    }));
+    flow.computeLineDistances();
+    flow.renderOrder = 1;
+    group.add(base, flow);
+    branches.set(id, { base, flow, path });
+  }
+
   // ---------- tracing ----------
   function collect(id, map, next, acc = new Set()) {
     for (const e of map.get(id) ?? []) {
@@ -126,6 +176,12 @@ export function buildPowerLayer(power, { anchorOf, labelOf }) {
     return [...racks];
   };
   const inGraph = (id) => up.has(id) || down.has(id);
+
+  function styleBranch(entry, state) {
+    entry.base.material.opacity = { active: 1, partner: 0.6, dim: 0.06, normal: 0.6 }[state];
+    entry.base.material.linewidth = state === 'active' ? 2.6 : 1.6;
+    entry.flow.visible = state !== 'dim';
+  }
 
   function style(entry, state) {
     const { base, flow } = entry;
@@ -149,14 +205,22 @@ export function buildPowerLayer(power, { anchorOf, labelOf }) {
       const feeders = servedBy(id);
       if (!feeders.length) { clear(); return null; }
       active = new Set();
-      for (const f of feeders) { upstream(f, active); }
+      for (const f of feeders) upstream(f, active);
       racks = [id];
     }
     for (const [eid, entry] of lines) style(entry, active.has(eid) ? 'active' : partner.has(eid) ? 'partner' : 'dim');
+    // A branch is active when its feeder is the selection, downstream of it, or feeds the selected rack.
+    const activeFeeders = new Set([id, ...[...active].map((eid) => lines.get(eid)?.edge.to)]);
+    const partnerFeeders = new Set([...partner].map((eid) => lines.get(eid)?.edge.to));
+    if (partnerOf.has(id)) partnerFeeders.add(partnerOf.get(id));
+    for (const [fid, entry] of branches) {
+      styleBranch(entry, activeFeeders.has(fid) ? 'active' : partnerFeeders.has(fid) ? 'partner' : 'dim');
+    }
     return racks;
   }
   function clear() {
     for (const entry of lines.values()) style(entry, 'normal');
+    for (const entry of branches.values()) styleBranch(entry, 'normal');
   }
 
   // ---------- panel section ----------
@@ -200,6 +264,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf }) {
     section,
     tick(dt) {
       for (const { flow } of lines.values()) flow.material.dashOffset -= dt * 0.9;
+      for (const { flow } of branches.values()) flow.material.dashOffset -= dt * 0.6;
     },
   };
 }

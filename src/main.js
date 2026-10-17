@@ -87,6 +87,7 @@ const powerLayer = data.power && buildPowerLayer(data.power, {
     return u ? new THREE.Vector3(u.item.x, u.top, u.item.z) : null;
   },
   labelOf: (id) => units.get(id)?.item.alias ?? id,
+  itemOf: (id) => units.get(id)?.item,
 });
 let tinted = [];
 function showPower(on) {
