@@ -106,13 +106,15 @@ function animateWhileVisible(object, step) {
 }
 
 let supplied = [];
+// Layers without a checkbox of their own (the aisle roofs follow walls / doors) count as ticked.
+const checked = (name) => document.querySelector(`[data-layer="${name}"]`)?.checked ?? true;
 // Layers that only add clutter in power view; hidden while it is on, then back to their checkbox state.
 const HIDE_IN_POWER_VIEW = ['sensors', 'cameras', 'containment'];
 function showPower(on) {
   // While the layer is on, everything outside the power chain fades back.
   for (const [id, u] of units) setGhost(u.group, on && !powerLayer.nodes.has(id));
   for (const name of HIDE_IN_POWER_VIEW) {
-    layers[name].visible = !on && document.querySelector(`[data-layer="${name}"]`).checked;
+    layers[name].visible = !on && checked(name);
   }
   setFade(roomLayers.walls, on ? 0.35 : 1);
   document.getElementById('power-legend').classList.toggle('hidden', !on);
@@ -156,7 +158,7 @@ function showHeat(on) {
   // the map has to be seen through the racks, so all equipment fades back while it is on
   for (const u of units.values()) setGhost(u.group, on);
   for (const name of ['cameras', 'containment']) {
-    layers[name].visible = !on && document.querySelector(`[data-layer="${name}"]`).checked;
+    layers[name].visible = !on && checked(name);
   }
   setFade(roomLayers.walls, on ? 0.35 : 1);
   document.getElementById('heat-legend').classList.toggle('hidden', !on);
