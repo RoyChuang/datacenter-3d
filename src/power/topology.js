@@ -14,15 +14,9 @@ const BADGE_LIFT = { A: 0.55, B: 0.95 };
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
 const TRAY = { A: 2.85, B: 3.1, dc: 2.35 };
 const STUB = 0.9; // external sources come in from above as a short vertical stub
-// Branches: a busway along each row just above the cabinets, then a drop into every unit served.
-// A and B run on opposite sides of the cabinet top, like the A/B PDUs inside a rack. Branches to
-// anything other than racks (e.g. panel -> in-row coolers) sit closer to the centre line and higher,
-// so they never lie on top of a rack busway in the same row.
-const BRANCH = {
-  rack: { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } },
-  // above the 2.6 m walls (panels feed coolers in other rooms), below the 2.85 m A trunk
-  other: { A: { height: 2.65, side: -0.12 }, B: { height: 2.75, side: 0.12 } },
-};
+// PDC branches: a busway along each row just above the cabinets, then a drop into every rack and
+// in-row cooler it serves. A and B run on opposite sides of the cabinet top, like the A/B PDUs in a rack.
+const BRANCH = { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } };
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const pathOf = (edge) => edge.path ?? 'dc';
@@ -139,7 +133,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf, kindOf }) {
     const source = anchorOf(id);
     if (!source || !racks.length) continue;
     const path = (up.get(id) ?? []).find((e) => e.path)?.path ?? 'A';
-    const { height: h, side } = BRANCH[racks.every((r) => kindOf(r) === 'rack') ? 'rack' : 'other'][path];
+    const { height: h, side } = BRANCH[path];
     const segments = [];
     const seg = (a, b) => segments.push(a.x, a.y, a.z, b.x, b.y, b.z);
 
@@ -265,13 +259,13 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf, kindOf }) {
         const p = (up.get(f) ?? []).find((e) => e.path)?.path;
         return `${p ? `<span class="feed feed-${p}">${p}</span> ` : ''}${labelOf(f)}`;
       }).join('<br>')]);
-      if (power.servesAssumed) rows.push(['', '<span class="muted">推定，尚無迴路資料</span>']);
+      if (power.servesAssumed) rows.push(['', '<span class="muted">依位置推定，尚無迴路資料</span>']);
     }
     return `<div class="section-title">電力</div><table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
   }
 
   // Power-related ids (shown solid while the layer is on; everything else is ghosted). Served racks stay
-  // ghosted until selected — there are too many — but other served units (e.g. coolers) are shown.
+  // ghosted until selected — there are too many — but served in-row coolers are shown.
   const nodes = new Set(power.edges.flatMap((e) => [e.from, e.to]));
   for (const id of Object.values(power.serves).flat()) if (kindOf(id) !== 'rack') nodes.add(id);
 

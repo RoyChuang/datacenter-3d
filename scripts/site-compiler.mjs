@@ -236,14 +236,14 @@ function compilePower(power, equipment, errors, warnings) {
     redundancy.push([a, b]);
   }
 
-  // serves: what each feeder supplies. A row id means the racks in that row; an equipment id means
-  // that one unit, whatever its type (e.g. an in-row cooler on a panel).
+  // serves: what each feeder supplies. A row id means the racks and in-row coolers in that row;
+  // an equipment id means that one unit.
   const serves = {};
   for (const [id, targets] of Object.entries(power.serves ?? {})) {
     if (!byId.has(id)) { warnings.push(`power.serves.${id}：沒有這台設備`); continue; }
     serves[id] = [];
     for (const t of targets) {
-      const units = byId.has(t) ? [t] : equipment.filter((e) => e.type === 'rack' && e.row === t).map((e) => e.id);
+      const units = byId.has(t) ? [t] : equipment.filter((e) => (e.type === 'rack' || e.type === 'rowcool') && e.row === t).map((e) => e.id);
       if (!units.length) warnings.push(`power.serves.${id}：${t} 沒有對應的排或設備`);
       serves[id].push(...units);
     }
