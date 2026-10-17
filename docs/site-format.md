@@ -65,8 +65,9 @@ walls:
 doors:
   - { id: DR-1, rect: [16.28, 1.93, 16.62, 4.03] }            # 實心門，會自動切開牆
   - { id: GL-1, kind: glass, rect: [3.58, 1.87, 3.75, 4] }    # 玻璃隔間
+  - { id: SD-1, kind: sliding, rect: [2.25, 10.2, 3.45, 10.3] } # 玻璃滑門（有把手）
 aisles:
-  - { id: AISLE-A, between: [A-W, A-E], doors: [start, end] } # 自動算範圍、頂板、端門
+  - { id: AISLE-A, between: [A-W, A-E], doors: [start, end] } # 自動算範圍、頂板、端門（玻璃滑門）
 ```
 
 ## 點位

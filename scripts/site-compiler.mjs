@@ -105,7 +105,7 @@ export function compileSite(site, { devices: realDevices } = {}) {
     containments.push({ id: aisle.id, ...toRect(s, e) });
     for (const end of aisle.doors ?? []) {
       const r = end === 'start' ? toRect(s - AISLE_DOOR_THICKNESS, s) : toRect(e, e + AISLE_DOOR_THICKNESS);
-      doors.push({ id: `${aisle.id}-${end === 'start' ? 'S' : 'E'}`, kind: 'glass', ...r });
+      doors.push({ id: `${aisle.id}-${end === 'start' ? 'S' : 'E'}`, kind: 'sliding', ...r });
     }
   }
 

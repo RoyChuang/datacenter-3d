@@ -34,6 +34,7 @@ export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect }) 
       if (!isShown(hit.object)) continue;
       const root = pickRoot(hit.object);
       if (root) return root;
+      if (hit.object.userData.occluder) return null; // a wall or door is in front
     }
     return null;
   }

@@ -54,6 +54,79 @@ function tiledPlane(rect, tileSize, texture, y) {
   return mesh;
 }
 
+const DOOR_HEIGHT = 2.1;
+const MATERIALS = {
+  frame: new THREE.MeshStandardMaterial({ color: 0x7e8791, roughness: 0.4, metalness: 0.6 }), // powder-coated steel / aluminium
+  leaf: new THREE.MeshStandardMaterial({ color: 0xc9cfd6, roughness: 0.45, metalness: 0.35 }), // steel door leaf
+  handle: new THREE.MeshStandardMaterial({ color: 0xc3c9d0, roughness: 0.25, metalness: 0.9 }),
+  vision: new THREE.MeshStandardMaterial({ color: 0x2b3640, roughness: 0.1, metalness: 0.5 }),
+  glass: new THREE.MeshPhysicalMaterial({ color: 0xe3f0f6, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0, depthWrite: false }),
+};
+
+// A door built in its own frame: length along local X, wall thickness along local Z.
+function doorAssembly(rect, { glass, sliding, height, wallHeight, wallMat }) {
+  const alongX = rect.x2 - rect.x1 >= rect.z2 - rect.z1;
+  const len = alongX ? rect.x2 - rect.x1 : rect.z2 - rect.z1;
+  const thick = alongX ? rect.z2 - rect.z1 : rect.x2 - rect.x1;
+  const group = new THREE.Group();
+  group.name = rect.id ?? '';
+  group.position.set((rect.x1 + rect.x2) / 2, 0, (rect.z1 + rect.z2) / 2);
+  if (!alongX) group.rotation.y = Math.PI / 2;
+
+  const box = (w, h, d, material, x, y, z = 0, shadow = true) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = mesh.receiveShadow = shadow;
+    mesh.userData.occluder = material !== MATERIALS.glass; // solid parts block picking
+    group.add(mesh);
+    return mesh;
+  };
+
+  if (glass) {
+    // Aluminium-framed glass; wide openings get a centre mullion like a pair of sliding doors.
+    const f = 0.04;
+    box(len - f * 2, height - f * 2, 0.012, MATERIALS.glass, 0, height / 2, 0, false);
+    box(f, height, f, MATERIALS.frame, -len / 2 + f / 2, height / 2);
+    box(f, height, f, MATERIALS.frame, len / 2 - f / 2, height / 2);
+    box(len, f, f, MATERIALS.frame, 0, height - f / 2);
+    box(len, f, f, MATERIALS.frame, 0, f / 2);
+    if (len > 0.9) box(f * 0.75, height - f * 2, f, MATERIALS.frame, 0, height / 2);
+    // containment doors get vertical pull handles on both faces; plain glass partitions don't
+    if (sliding) {
+      const hx = len > 0.9 ? -0.08 : len / 2 - 0.1;
+      for (const side of [1, -1]) box(0.025, 0.35, 0.025, MATERIALS.handle, hx, 1.05, side * 0.03);
+    }
+    return group;
+  }
+
+  // Wall above the opening, then frame, leaves, handles and vision panels.
+  if (wallHeight > height) box(len, wallHeight - height, thick, wallMat, 0, height + (wallHeight - height) / 2);
+  const f = 0.06;
+  const frameDepth = thick + 0.02;
+  box(f, height, frameDepth, MATERIALS.frame, -len / 2 + f / 2, height / 2);
+  box(f, height, frameDepth, MATERIALS.frame, len / 2 - f / 2, height / 2);
+  box(len, f, frameDepth, MATERIALS.frame, 0, height - f / 2);
+
+  const opening = len - f * 2;
+  const leaves = opening > 1.4 ? 2 : 1;
+  const leafW = opening / leaves - 0.006;
+  const leafH = height - f - 0.01;
+  const leafT = 0.05;
+  for (let i = 0; i < leaves; i++) {
+    const x = -opening / 2 + (opening / leaves) * (i + 0.5);
+    box(leafW, leafH, leafT, MATERIALS.leaf, x, leafH / 2 + 0.005);
+    // handle sits at the meeting edge of a pair, otherwise at the right-hand edge
+    const edge = leaves === 2 ? (i === 0 ? 1 : -1) : 1;
+    const hx = x + edge * (leafW / 2 - 0.09);
+    for (const side of [1, -1]) {
+      box(0.04, 0.04, 0.03, MATERIALS.handle, hx, 1.05, side * (leafT / 2 + 0.015)); // rose
+      box(0.14, 0.02, 0.02, MATERIALS.handle, hx - edge * 0.06, 1.05, side * (leafT / 2 + 0.035)); // lever
+    }
+    box(0.14, 0.55, leafT + 0.004, MATERIALS.vision, x - edge * 0.12, 1.5, 0, false); // narrow vision panel
+  }
+  return group;
+}
+
 export function buildRoom(room, rackTopY) {
   const group = new THREE.Group();
   group.name = 'room';
@@ -79,29 +152,24 @@ export function buildRoom(room, rackTopY) {
   for (const w of room.walls) {
     const mesh = slab(w, 0, room.wallHeight, wallMat);
     mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.occluder = true;
     walls.add(mesh);
   }
 
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0xbcc3cb, roughness: 0.45, metalness: 0.35 });
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xe3f0f6, transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0, depthWrite: false,
-  });
-  const frameMat = new THREE.LineBasicMaterial({ color: 0x8a939d }); // brushed aluminium frame
   for (const d of room.doors) {
-    const isGlass = d.kind === 'glass';
-    const mesh = slab(d, 0, isGlass ? rackTopY : 2.1, isGlass ? glassMat : doorMat);
-    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), frameMat));
-    if (!isGlass) mesh.castShadow = mesh.receiveShadow = true;
-    walls.add(mesh);
+    const sliding = d.kind === 'sliding';
+    const glass = sliding || d.kind === 'glass';
+    walls.add(doorAssembly(d, { glass, sliding, height: glass ? rackTopY : DOOR_HEIGHT, wallHeight: room.wallHeight, wallMat }));
   }
   group.add(walls);
 
   // Glass roof over each contained aisle, flush with the rack tops.
   const containment = new THREE.Group();
   containment.name = 'containment';
+  const roofFrame = new THREE.LineBasicMaterial({ color: 0x7e8791 });
   for (const c of room.containments) {
-    const roof = slab(c, rackTopY, 0.02, glassMat);
-    roof.add(new THREE.LineSegments(new THREE.EdgesGeometry(roof.geometry), frameMat));
+    const roof = slab(c, rackTopY, 0.02, MATERIALS.glass);
+    roof.add(new THREE.LineSegments(new THREE.EdgesGeometry(roof.geometry), roofFrame));
     containment.add(roof);
   }
   group.add(containment);

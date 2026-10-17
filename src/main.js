@@ -82,7 +82,8 @@ const picker = setupPicker({
   camera,
   scene,
   dom: stage.renderer.domElement,
-  targets: [equipment, pointSet.layers.sensors, pointSet.layers.cameras],
+  // walls are included only so they can block picks behind them
+  targets: [equipment, pointSet.layers.sensors, pointSet.layers.cameras, roomLayers.walls],
   tooltip: document.getElementById('tooltip'),
   onSelect(object) {
     panel.show(object?.userData.pick ?? null);
