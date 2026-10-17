@@ -5,10 +5,9 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 
-// A / B feed colours (common dual-feed convention): deep for trunks (UPS -> PDC), light for branches
-// (PDC -> racks), grey for DC battery links.
+// A / B feed colours (common dual-feed convention), used for trunks (UPS -> PDC) and branches (PDC -> racks)
+// alike — branches are only thinner; grey for DC battery links.
 export const PATH_COLORS = { A: 0x1d4ed8, B: 0xea580c, dc: 0x6b7280 };
-const BRANCH_COLORS = { A: 0x93c5fd, B: 0xfdba74 };
 // Badges for A and B sit at different heights so neighbours (e.g. UPS-A next to UPS-B) don't overlap.
 const BADGE_LIFT = { A: 0.55, B: 0.95 };
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
@@ -160,7 +159,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     }
     if (!segments.length) continue;
     const geometry = new LineSegmentsGeometry().setPositions(segments);
-    const base = new LineSegments2(geometry, new LineMaterial({ color: BRANCH_COLORS[path], linewidth: 1.3, transparent: true, opacity: 0.8 }));
+    const base = new LineSegments2(geometry, new LineMaterial({ color: PATH_COLORS[path], linewidth: 1.3, transparent: true, opacity: 1 }));
     const flow = new LineSegments2(geometry, new LineMaterial({
       color: 0xffffff, linewidth: 1, dashed: true, dashSize: 0.12, gapSize: 0.4, transparent: true, opacity: 0.6,
     }));
@@ -190,7 +189,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   const inGraph = (id) => up.has(id) || down.has(id);
 
   function styleBranch(entry, state) {
-    entry.base.material.opacity = { active: 1, partner: 0.6, dim: 0.06, normal: 0.8 }[state];
+    entry.base.material.opacity = { active: 1, partner: 0.6, dim: 0.06, normal: 1 }[state];
     entry.base.material.linewidth = state === 'active' ? 2.2 : 1.3;
     entry.flow.visible = state !== 'dim';
   }
