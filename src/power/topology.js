@@ -6,10 +6,9 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 
 // A / B feed colours (common dual-feed convention): deep for trunks (UPS -> PDC), light for branches
-// (PDC -> racks), grey for DC battery links. Single feed is flagged in yellow, clearly apart from B's orange.
+// (PDC -> racks), grey for DC battery links.
 export const PATH_COLORS = { A: 0x1d4ed8, B: 0xea580c, dc: 0x6b7280 };
 const BRANCH_COLORS = { A: 0x93c5fd, B: 0xfdba74 };
-const WARN = '#eab308';
 // Badges for A and B sit at different heights so neighbours (e.g. UPS-A next to UPS-B) don't overlap.
 const BADGE_LIFT = { A: 0.55, B: 0.95 };
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
@@ -73,7 +72,6 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   }
   const external = new Set(power.external);
   const partnerOf = new Map(power.redundancy.flatMap(([a, b]) => [[a, b], [b, a]]));
-  const single = new Set(power.singleFeed);
   const servedBy = (rackId) => Object.keys(power.serves).filter((id) => power.serves[id].includes(rackId));
 
   // ---------- lines ----------
@@ -106,7 +104,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     lines.set(e.id, { base, flow, edge: e });
   }
 
-  // ---------- badges: which path feeds each node; single-feed PDCs flagged ----------
+  // ---------- badges: name and path of each node ----------
   for (const id of new Set(power.edges.flatMap((e) => [e.from, e.to]))) {
     const anchor = anchorOf(id);
     // a node's path comes from its feeds in, or for a root (e.g. UPS) from its feeds out
@@ -114,12 +112,10 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     if (!anchor || !edges.length) continue;
     const incoming = edges.filter((e) => e.to === id);
     const paths = [...new Set((incoming.length ? incoming : edges).map((e) => e.path))].sort();
-    const isSingle = single.has(id);
     const path = paths.join('+');
     // an alias like "UPS-A" already says the path; otherwise "PDC1 · A"
     const name = labelOf(id) !== id ? labelOf(id) : `${id} · ${path}`;
-    const text = isSingle ? `⚠ ${name} 單路` : name;
-    const badge = textSprite(text, { bg: isSingle ? WARN : hex(PATH_COLORS[paths[0]]), fg: isSingle ? '#1f2933' : '#ffffff' });
+    const badge = textSprite(name, { bg: hex(PATH_COLORS[paths[0]]) });
     const top = anchor.clone().add(new THREE.Vector3(0, BADGE_LIFT[paths[0]] ?? 0.55, 0));
     badge.position.copy(top).add(new THREE.Vector3(0, 0.15, 0));
     // thin leader line from the equipment up to its raised badge
@@ -253,7 +249,6 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       const batteries = (up.get(id) ?? []).filter((e) => e.kind === 'dc').map((e) => e.from);
       if (batteries.length) rows.push(['電池', batteries.join('、')]);
       if (partnerOf.has(id)) rows.push(['備援', `2N · ${labelOf(partnerOf.get(id))}`]);
-      else if (single.has(id)) rows.push(['備援', '<span class="badge warn">單路（無備援）</span>']);
       const racks = servesOf(id);
       if (racks.length) rows.push(['供電機櫃', `${racks.length} 台${power.servesAssumed ? '（推定）' : ''}`]);
     } else {
@@ -263,8 +258,6 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
         const p = (up.get(f) ?? []).find((e) => e.path)?.path;
         return `${p ? `<span class="feed feed-${p}">${p}</span> ` : ''}${labelOf(f)}`;
       }).join('<br>')]);
-      const paths = new Set(feeders.flatMap((f) => (up.get(f) ?? []).map((e) => e.path).filter(Boolean)));
-      if (paths.size < 2) rows.push(['備援', '<span class="badge warn">單路（無備援）</span>']);
       if (power.servesAssumed) rows.push(['', '<span class="muted">依位置推定，尚無迴路資料</span>']);
     }
     return `<div class="section-title">電力</div><table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;

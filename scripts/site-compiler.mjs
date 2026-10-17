@@ -235,8 +235,6 @@ function compilePower(power, equipment, errors, warnings) {
     if (pa.some((p) => pb.includes(p))) warnings.push(`power.redundancy: ${a} 和 ${b} 有同一路供電，不是真正的雙路備援`);
     redundancy.push([a, b]);
   }
-  const paired = new Set(redundancy.flat());
-  const singleFeed = [...feeders.keys()].filter((id) => byId.get(id).type === 'pdc' && !paired.has(id) && feeders.get(id).length < 2);
 
   // serves: which racks each feeder supplies, given as row ids or rack ids.
   const serves = {};
@@ -250,7 +248,7 @@ function compilePower(power, equipment, errors, warnings) {
     }
   }
 
-  return { external: [...external], edges, redundancy, singleFeed, serves, servesAssumed: !!power.servesAssumed };
+  return { external: [...external], edges, redundancy, serves, servesAssumed: !!power.servesAssumed };
 }
 
 function cutWall(wall, door) {
