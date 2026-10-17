@@ -103,10 +103,13 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   }
 
   // ---------- badges: which path feeds each node; single-feed PDCs flagged ----------
-  for (const [id, edges] of up) {
+  for (const id of new Set(power.edges.flatMap((e) => [e.from, e.to]))) {
     const anchor = anchorOf(id);
-    if (!anchor || edges.every((e) => e.kind === 'dc')) continue;
-    const paths = [...new Set(edges.filter((e) => e.path).map((e) => e.path))].sort();
+    // a node's path comes from its feeds in, or for a root (e.g. UPS) from its feeds out
+    const edges = [...(up.get(id) ?? []), ...(down.get(id) ?? [])].filter((e) => e.kind === 'ac');
+    if (!anchor || !edges.length) continue;
+    const incoming = edges.filter((e) => e.to === id);
+    const paths = [...new Set((incoming.length ? incoming : edges).map((e) => e.path))].sort();
     const isSingle = single.has(id);
     const text = isSingle ? `${paths.join('+')} 路 · 單路` : labelOf(id) !== id ? labelOf(id) : `${paths.join('+')} 路`;
     const badge = textSprite(text, { bg: isSingle ? WARN : hex(PATH_COLORS[paths[0]]) });
@@ -230,7 +233,8 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   function section(id) {
     const rows = [];
     if (inGraph(id)) {
-      if (up.has(id)) rows.push(['上游', feedText(id) || '—']);
+      const feeds = feedText(id);
+      if (feeds) rows.push(['上游', feeds]);
       const children = (down.get(id) ?? []).filter((e) => e.kind === 'ac').map((e) => labelOf(e.to));
       if (children.length) rows.push(['下游', children.join('、')]);
       const batteries = (up.get(id) ?? []).filter((e) => e.kind === 'dc').map((e) => e.from);

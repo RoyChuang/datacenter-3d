@@ -85,7 +85,7 @@ points:
 
 ```yaml
 power:
-  external: [EMP1-1, EMP1-2]       # 不在平面圖上的上游設備，3D 只顯示來源標籤
+  external: [EMP1-1, EMP1-2]       # （選用）不在平面圖上的上游設備，3D 只顯示來源標籤；不需要就省略，連同下面兩行
   feeds:
     - { path: A, from: EMP1-1, to: UPS1 }
     - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7, ACP-1] }

@@ -96,11 +96,9 @@ equipment:
 
 # ---------- 電力拓樸 ----------
 power:
-  external: [EMP1-1, EMP1-2]          # 不在平面圖上的上游電表，3D 只顯示標籤
+  # 上游電表 EMP1-1 / EMP1-2 位置不明、也沒有數值，不納入；UPS 為電力鏈起點
   feeds:
-    - { path: A, from: EMP1-1, to: UPS1 }
     - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7, ACP-1] }
-    - { path: B, from: EMP1-2, to: UPS2 }
     - { path: B, from: UPS2, to: [PDC2, PDC4, PDC6, ACP-2] }
   redundancy: [[PDC1, PDC2], [PDC3, PDC4], [PDC5, PDC6]]   # PDC7 單路，沒有備援
   servesAssumed: true                  # 推定：排尾的 PDC 供電給該區的排，待真實迴路資料取代
