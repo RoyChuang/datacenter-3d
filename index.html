@@ -20,6 +20,7 @@
       <label><input type="checkbox" data-layer="sensors" checked /> 溫濕度感測器</label>
       <label><input type="checkbox" data-layer="cameras" checked /> 攝影機</label>
       <label><input type="checkbox" data-layer="power" /> 電力拓樸</label>
+      <label><input type="checkbox" data-layer="heat" /> 溫度熱圖</label>
       <label><input type="checkbox" data-layer="plan" /> 平面圖疊圖（比對用）</label>
     </div>
 
@@ -32,6 +33,12 @@
       <div class="legend-row"><span class="swatch" style="background:#6b7280"></span>直流（電池）</div>
       <div class="legend-note">走線為示意；點選設備可追蹤上下游與備援</div>
       <button id="power-show-all" class="hidden">顯示全部（Esc）</button>
+    </div>
+    <div id="heat-legend" class="hud hidden">
+      <div class="legend-title"></div>
+      <div class="heat-bar"></div>
+      <div class="heat-ticks"><span>15</span><span>20</span><span>25</span><span>30</span><span>35 °C</span></div>
+      <div class="legend-note">感測器之間為內插估算，未考慮牆的阻隔；離感測器太遠處不顯示</div>
     </div>
     <div id="tooltip" class="hidden"></div>
 

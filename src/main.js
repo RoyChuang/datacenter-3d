@@ -9,6 +9,7 @@ import { buildUps, buildBattery } from './builders/power.js';
 import { buildPanel } from './builders/panel.js';
 import { buildPowerLayer } from './power/topology.js';
 import { setFade, setGhost, setSupplied } from './power/appearance.js';
+import { buildHeatmap, SCALE, SCALE_MIN, SCALE_MAX } from './thermal/heatmap.js';
 import { buildPoints } from './builders/points.js';
 import { buildPlanOverlay } from './builders/planOverlay.js';
 import { setupPicker } from './interaction/picker.js';
@@ -136,6 +137,28 @@ if (powerLayer) {
     return true;
   });
 }
+// ---------- temperature heatmap ----------
+// A horizontal slice at the sensors' mounting height, estimated from their live readings.
+const sensorPoints = data.points.filter((p) => p.type === 'sensor');
+const heatHeight = sensorPoints[0]?.y ?? 1.6;
+const heat = buildHeatmap(room, sensorPoints, heatHeight);
+siteRoot.add(heat.mesh);
+layers.heat = heat.mesh;
+const heatOn = () => heat.mesh.visible;
+function showHeat(on) {
+  // the map has to be seen through the racks, so all equipment fades back while it is on
+  for (const u of units.values()) setGhost(u.group, on);
+  for (const name of ['cameras', 'containment']) {
+    layers[name].visible = !on && document.querySelector(`[data-layer="${name}"]`).checked;
+  }
+  setFade(roomLayers.walls, on ? 0.35 : 1);
+  document.getElementById('heat-legend').classList.toggle('hidden', !on);
+  if (on) heat.redraw();
+}
+const gradient = SCALE.map(([t, c]) => `${c} ${((t - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100}%`).join(', ');
+document.querySelector('#heat-legend .heat-bar').style.background = `linear-gradient(to right, ${gradient})`;
+document.querySelector('#heat-legend .legend-title').textContent = `溫度（離地 ${heatHeight} m）`;
+
 const planUrl = site.plan && planImages[`../sites/${siteId}/${site.plan.image}`];
 if (planUrl) {
   layers.plan = buildPlanOverlay(planUrl, site.plan, room.tileSize, rackTop + 0.1, stage.requestRender);
@@ -159,7 +182,7 @@ function unitOf(object) {
   return o.parent === equipment ? o : null;
 }
 function clearCutaway() {
-  for (const g of cutaway) setGhost(g, false);
+  for (const g of cutaway) setGhost(g, heatOn()); // back to whatever the heat view wants
   cutaway = [];
 }
 // Boxes the camera must not end up inside (equipment and solid walls), computed once.
@@ -230,19 +253,32 @@ const picker = setupPicker({
 
 startMockLive(data.points, (id, reading) => {
   pointSet.updateSensor(id, reading);
+  heat.set(id, reading.temp);
   stage.requestRender();
   const sel = picker.selected?.userData.pick;
   if (sel?.data.id === id) panel.refresh(sel);
 });
 
 // ---------- toolbar ----------
+// Analysis views each take over the scene, so only one can be on at a time.
+const ANALYSIS = { power: (on) => showPower(on), heat: (on) => showHeat(on) };
 document.querySelectorAll('[data-layer]').forEach((input) => {
-  const layer = layers[input.dataset.layer];
+  const name = input.dataset.layer;
+  const layer = layers[name];
   if (!layer) { input.closest('label').classList.add('hidden'); return; }
   layer.visible = input.checked;
   input.addEventListener('change', () => {
+    if (input.checked && ANALYSIS[name]) {
+      for (const other of Object.keys(ANALYSIS)) {
+        const box = document.querySelector(`[data-layer="${other}"]`);
+        if (other === name || !box?.checked) continue;
+        box.checked = false;
+        layers[other].visible = false;
+        ANALYSIS[other](false);
+      }
+    }
     layer.visible = input.checked;
-    if (layer === powerLayer?.group) showPower(input.checked);
+    ANALYSIS[name]?.(input.checked);
     stage.refreshShadows(); // hidden walls must not leave their shadows behind
   });
 });
