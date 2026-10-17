@@ -68,10 +68,9 @@ rows:
   - { id: D-S, axis: x, line: 16.42, from: 20.8, facing: north,
       units: [D9, D10, D11, R13, D12, D13, D14, R14, D15] }
 
+  # UPS0 和電池櫃沒有數值可顯示，暫不建模；兩個空位保留 UPS2 / UPS1 在平面圖上的位置
   - { id: PWR-N, axis: x, line: 16.87, from: 11.12, facing: south,
-      units: [BATT-1, BATT-2, UPS2, UPS1, UPS0] }
-  - { id: PWR-W, axis: z, line: 10.17, from: 18.1, facing: east, widths: { battery: 500 },
-      units: [BATT-3, BATT-4, BATT-5, BATT-6] }
+      units: [{ gap: 600 }, { gap: 600 }, UPS2, UPS1] }
 
 # 個別設備的寬度覆寫（mm）
 widths: { B3: 800, B4: 800, B5: 800, B6: 800, B9: 800, B10: 800, B11: 800, B12: 800,
@@ -79,27 +78,16 @@ widths: { B3: 800, B4: 800, B5: 800, B6: 800, B9: 800, B10: 800, B11: 800, B12: 
 
 # 個別設備的附加屬性（原樣帶到詳情面板）
 props:
-  UPS0: { capacityKVA: 200 }
   UPS1: { capacityKVA: 200, alias: UPS-A }
   UPS2: { capacityKVA: 200, alias: UPS-B }
-  BATT-1: { ups: UPS2 }
-  BATT-2: { ups: UPS2 }
-  BATT-3: { ups: UPS1 }
-  BATT-4: { ups: UPS1 }
-  BATT-5: { ups: UPS0 }
-  BATT-6: { ups: UPS0 }
 
-# 不屬於任何一排的單獨設備
-equipment:
-  - { id: ACP-1, at: [17.27, 0.21], facing: south }   # 走廊北牆的壁掛配電箱
-  - { id: ACP-2, at: [18.63, 0.21], facing: south }
 
 # ---------- 電力拓樸 ----------
 power:
   # 上游電表 EMP1-1 / EMP1-2 位置不明、也沒有數值，不納入；UPS 為電力鏈起點
   feeds:
-    - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7, ACP-1] }
-    - { path: B, from: UPS2, to: [PDC2, PDC4, PDC6, ACP-2] }
+    - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7] }
+    - { path: B, from: UPS2, to: [PDC2, PDC4, PDC6] }
   redundancy: [[PDC1, PDC2], [PDC3, PDC4], [PDC5, PDC6], [PDC7, PDC6]]   # PDC6 同時備援 PDC5 和 PDC7
   servesAssumed: true                  # 推定：排尾的 PDC 供電給該區的排，待真實迴路資料取代
   serves:

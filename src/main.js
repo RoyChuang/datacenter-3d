@@ -138,6 +138,8 @@ function applyPowerSelection() {
   for (const [rid, u] of units) if (!powerLayer.nodes.has(rid) && !supplied.includes(rid)) setGhost(u.group, true);
 }
 if (powerLayer) {
+  // only list battery (DC) links in the legend when the site has any
+  document.getElementById('legend-dc').classList.toggle('hidden', !data.power.edges.some((e) => e.kind === 'dc'));
   siteRoot.add(powerLayer.group);
   layers.power = powerLayer.group;
   animateWhileVisible(powerLayer.group, (dt) => powerLayer.tick(dt));
