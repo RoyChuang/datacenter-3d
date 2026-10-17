@@ -46,6 +46,16 @@ export function buildSites({ only, log = console.log } = {}) {
     for (const f of fs.readdirSync(out)) if (!names.has(f)) fs.rmSync(path.join(out, f));
     log(`  ✔ 已輸出 src/generated/${id}/`);
   }
+  // Output with no site.yaml behind it was written by hand: never validated and not reproducible.
+  if (!only && fs.existsSync(OUT_DIR)) {
+    for (const id of fs.readdirSync(OUT_DIR)) {
+      if (!ids.includes(id) && fs.statSync(path.join(OUT_DIR, id)).isDirectory()) {
+        log(`
+[site] ${id}
+  ⚠ src/generated/${id}/ 沒有對應的 sites/${id}/site.yaml（手寫的輸出不會經過驗證，請改寫成 site.yaml）`);
+      }
+    }
+  }
   return ok;
 }
 

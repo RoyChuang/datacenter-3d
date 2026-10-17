@@ -27,6 +27,10 @@ const POWER_PATHS = ['A', 'B'];
 // modelled yet; they are accepted but the airflow layer is left out rather than drawn wrongly.
 const AIRFLOW_SUPPORTED = ['cold-aisle'];
 const AIRFLOW_KNOWN = ['cold-aisle', 'hot-aisle', 'none'];
+// Fields the compiler reads. Anything else is ignored, so it is reported instead of silently dropped.
+const SITE_KEYS = ['id', 'name', 'grid', 'plan', 'wallHeight', 'perimeter', 'mockDevices', 'airflow', 'mock', 'typeRules', 'types',
+  'walls', 'doors', 'rows', 'widths', 'props', 'equipment', 'aisles', 'points', 'power'];
+const ROW_KEYS = ['id', 'axis', 'line', 'from', 'facing', 'widths', 'units'];
 const PERIMETER_THICKNESS = 0.2; // m
 const AISLE_DOOR_THICKNESS = 0.1; // m
 const EPS = 0.005; // m — overlaps smaller than this are ignored
@@ -45,6 +49,11 @@ export function compileSite(site, { devices: realDevices } = {}) {
   for (const [name, spec] of Object.entries(DEFAULT_TYPES)) types[name] = { ...spec, ...site.types?.[name] };
   const typeRules = (site.typeRules ?? DEFAULT_TYPE_RULES).map((r) => ({ re: new RegExp(r.match), type: r.type }));
   const typeOf = (id) => typeRules.find((r) => r.re.test(id))?.type ?? 'rack';
+
+  for (const key of Object.keys(site)) if (!SITE_KEYS.includes(key)) warnings.push(`未知欄位 ${key}：程式不會讀，見 docs/site-format.md`);
+  for (const row of site.rows ?? []) {
+    for (const key of Object.keys(row)) if (!ROW_KEYS.includes(key)) warnings.push(`row ${row.id}: 未知欄位 ${key}`);
+  }
 
   const width = r3(site.grid.cols * T);
   const depth = r3(site.grid.rows * T);
