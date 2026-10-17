@@ -70,7 +70,11 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     down.get(e.from).push(e);
   }
   const external = new Set(power.external);
-  const partnerOf = new Map(power.redundancy.flatMap(([a, b]) => [[a, b], [b, a]]));
+  // A unit may back up several others (e.g. one B-side PDC paired with two A-side PDCs).
+  const partnersOf = new Map();
+  for (const [a, b] of power.redundancy) {
+    for (const [x, y] of [[a, b], [b, a]]) partnersOf.set(x, [...(partnersOf.get(x) ?? []), y]);
+  }
   const servedBy = (rackId) => Object.keys(power.serves).filter((id) => power.serves[id].includes(rackId));
 
   // ---------- lines ----------
@@ -209,8 +213,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     let racks = [];
     if (inGraph(id)) {
       active = new Set([...upstream(id), ...downstream(id)]);
-      const p = partnerOf.get(id);
-      if (p) partner = upstream(p);
+      for (const p of partnersOf.get(id) ?? []) upstream(p, partner);
       racks = servesOf(id);
     } else {
       const feeders = servedBy(id);
@@ -223,7 +226,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     // A branch is active when its feeder is the selection, downstream of it, or feeds the selected rack.
     const activeFeeders = new Set([id, ...[...active].map((eid) => lines.get(eid)?.edge.to)]);
     const partnerFeeders = new Set([...partner].map((eid) => lines.get(eid)?.edge.to));
-    if (partnerOf.has(id)) partnerFeeders.add(partnerOf.get(id));
+    for (const p of partnersOf.get(id) ?? []) partnerFeeders.add(p);
     for (const [fid, entry] of branches) {
       styleBranch(entry, activeFeeders.has(fid) ? 'active' : partnerFeeders.has(fid) ? 'partner' : 'dim');
     }
@@ -247,7 +250,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       if (children.length) rows.push(['下游', children.join('、')]);
       const batteries = (up.get(id) ?? []).filter((e) => e.kind === 'dc').map((e) => e.from);
       if (batteries.length) rows.push(['電池', batteries.join('、')]);
-      if (partnerOf.has(id)) rows.push(['備援', `2N · ${labelOf(partnerOf.get(id))}`]);
+      if (partnersOf.has(id)) rows.push(['備援', `2N · ${partnersOf.get(id).map(labelOf).join('、')}`]);
       const racks = servesOf(id);
       if (racks.length) rows.push(['供電範圍', `${racks.length} 台${power.servesAssumed ? '（推定）' : ''}`]);
     } else {

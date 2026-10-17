@@ -100,7 +100,7 @@ power:
   feeds:
     - { path: A, from: UPS1, to: [PDC1, PDC3, PDC5, PDC7, ACP-1] }
     - { path: B, from: UPS2, to: [PDC2, PDC4, PDC6, ACP-2] }
-  redundancy: [[PDC1, PDC2], [PDC3, PDC4], [PDC5, PDC6]]   # PDC7 單路，沒有備援
+  redundancy: [[PDC1, PDC2], [PDC3, PDC4], [PDC5, PDC6], [PDC7, PDC6]]   # PDC6 同時備援 PDC5 和 PDC7
   servesAssumed: true                  # 推定：排尾的 PDC 供電給該區的排，待真實迴路資料取代
   serves:
     PDC1: [A-W, A-E]
@@ -108,7 +108,7 @@ power:
     PDC3: [B-W, B-E]
     PDC4: [B-W, B-E]
     PDC5: [C-N, C-S]
-    PDC6: [C-N, C-S]
+    PDC6: [C-N, C-S, D-N, D-S]
     PDC7: [D-N, D-S]
 
 # ---------- 封閉通道：指定兩排，系統自動算出通道範圍與端門 ----------
