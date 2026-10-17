@@ -147,19 +147,36 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       if (!byRow.has(row)) byRow.set(row, []);
       byRow.get(row).push(top);
     }
-    for (const tops of byRow.values()) {
-      // Rows run along x or z; the busway sits `side` metres off the rack centre line.
+    // Each row's busway: the line along its cabinets (`side` metres off the centre line) and a drop per cabinet.
+    const rows = [...byRow.values()].map((tops) => {
       const alongZ = Math.max(...tops.map((t) => t.x)) - Math.min(...tops.map((t) => t.x)) < 0.01;
       const off = alongZ ? new THREE.Vector3(side, 0, 0) : new THREE.Vector3(0, 0, side);
       const along = (v) => (alongZ ? v.z : v.x);
-      const sorted = [...tops].sort((a, b) => along(a) - along(b));
-      const ends = [sorted[0], sorted[sorted.length - 1]].map((t) => t.clone().add(off).setY(h));
-      // start the busway at the end nearest the PDC
-      if (Math.abs(along(source) - along(ends[1])) < Math.abs(along(source) - along(ends[0]))) ends.reverse();
-      const feed = route(source, ends[0], h);
+      const sorted = [...tops].sort((p, q) => along(p) - along(q));
+      return { off, sorted, ends: [sorted[0], sorted[sorted.length - 1]].map((t) => t.clone().add(off).setY(h)) };
+    });
+    // Chain the rows like real cabling: the nearest row is fed from the PDC, every further row from the
+    // nearest point already wired (the PDC or the start of a busway), not by a separate run from the PDC.
+    const wired = [source];
+    const flat = (p, q) => Math.abs(p.x - q.x) + Math.abs(p.z - q.z);
+    while (rows.length) {
+      let best = null;
+      for (const row of rows) {
+        for (const end of [0, 1]) {
+          for (const from of wired) {
+            const d = flat(from, row.ends[end]);
+            if (!best || d < best.d) best = { row, end, from, d };
+          }
+        }
+      }
+      const { row, end, from } = best;
+      rows.splice(rows.indexOf(row), 1);
+      const start = row.ends[end];
+      const feed = route(from, start, h);
       for (let i = 1; i < feed.length; i++) seg(feed[i - 1], feed[i]);
-      seg(ends[0], ends[1]);
-      for (const t of sorted) seg(t.clone().add(off).setY(h), t.clone().add(off));
+      seg(start, row.ends[1 - end]);
+      for (const t of row.sorted) seg(t.clone().add(row.off).setY(h), t.clone().add(row.off));
+      wired.push(start);
     }
     if (!segments.length) continue;
     const geometry = new LineSegmentsGeometry().setPositions(segments);
