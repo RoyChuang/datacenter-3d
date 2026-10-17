@@ -124,16 +124,73 @@ function applyPowerSelection() {
 if (powerLayer) {
   siteRoot.add(powerLayer.group);
   layers.power = powerLayer.group;
-  const clock = new THREE.Clock();
-  stage.onTick(() => { if (powerLayer.group.visible) powerLayer.tick(clock.getDelta()); else clock.getDelta(); });
+  // The flow animation keeps frames coming only while the power layer is shown,
+  // and only at ~30 fps — smooth enough for moving dashes, half the work on a 60 Hz screen.
+  let flowTime = 0;
+  stage.onTick((dt) => {
+    if (!powerLayer.group.visible) return false;
+    flowTime += dt;
+    if (flowTime < 1 / 30) return false;
+    powerLayer.tick(flowTime);
+    flowTime = 0;
+    return true;
+  });
 }
 const planUrl = site.plan && planImages[`../sites/${siteId}/${site.plan.image}`];
 if (planUrl) {
-  layers.plan = buildPlanOverlay(planUrl, site.plan, room.tileSize, rackTop + 0.1);
+  layers.plan = buildPlanOverlay(planUrl, site.plan, room.tileSize, rackTop + 0.1, stage.requestRender);
   siteRoot.add(layers.plan);
 }
 
 // ---------- selection + detail panel ----------
+// ---------- focusing on a piece of equipment ----------
+const FACING_DIR = {
+  north: new THREE.Vector3(0, 0, -1), south: new THREE.Vector3(0, 0, 1),
+  east: new THREE.Vector3(1, 0, 0), west: new THREE.Vector3(-1, 0, 0),
+};
+// Double-click focus: stand straight in front of the equipment. Front faces usually open onto a narrow
+// aisle, so whatever stands between the camera and the face (the opposite row) is ghosted — a cutaway —
+// until the selection changes.
+const FOCUS_DISTANCE = 3.2;
+let cutaway = [];
+function unitOf(object) {
+  let o = object;
+  while (o.parent && o.parent !== equipment) o = o.parent;
+  return o.parent === equipment ? o : null;
+}
+function clearCutaway() {
+  for (const g of cutaway) setGhost(g, false);
+  cutaway = [];
+}
+// Boxes the camera must not end up inside (equipment and solid walls), computed once.
+let solids = null;
+function insideSolid(p) {
+  solids ??= [...equipment.children, ...roomLayers.walls.children.filter((m) => m.userData.occluder)]
+    .map((o) => new THREE.Box3().setFromObject(o).expandByScalar(0.15));
+  return solids.some((b) => b.containsPoint(p));
+}
+function frontView(object, face, front) {
+  // back off from the ideal distance until the camera stands in free space (e.g. the gap between two rows)
+  let eye;
+  for (let d = FOCUS_DISTANCE; d >= 1.2; d -= 0.1) {
+    eye = face.clone().addScaledVector(front, d).setY(1.6);
+    if (!insideSolid(eye)) break;
+  }
+  // Ghost everything standing between the camera and the face, across the width of the view.
+  const self = unitOf(object);
+  const side = new THREE.Vector3(front.z, 0, -front.x);
+  const depth = eye.clone().sub(face).dot(front);
+  const offset = new THREE.Vector3();
+  for (const unit of equipment.children) {
+    if (unit === self) continue;
+    new THREE.Box3().setFromObject(unit).getCenter(offset).sub(face);
+    const along = offset.dot(front);
+    if (along > 0.1 && along < depth + 0.3 && Math.abs(offset.dot(side)) < 2.2) cutaway.push(unit);
+  }
+  for (const g of cutaway) setGhost(g, true);
+  return eye;
+}
+
 const panel = createPanel(document.getElementById('panel'), {
   onClose: () => picker.select(null),
   extra: (pick) => powerLayer?.section(pick.data.id) ?? '',
@@ -145,14 +202,26 @@ const picker = setupPicker({
   // walls are included only so they can block picks behind them
   targets: [equipment, pointSet.layers.sensors, pointSet.layers.cameras, roomLayers.walls],
   tooltip: document.getElementById('tooltip'),
+  requestRender: stage.requestRender,
   onSelect(object) {
+    clearCutaway();
     panel.show(object?.userData.pick ?? null);
-    applyPowerSelection();
+    applyPowerSelection(); // after the cutaway is cleared, so power-view ghosting is re-applied on top
   },
   // Selecting leaves the camera alone; only a double-click flies in.
   onFocus(object) {
-    // Fly to the object, keeping the current viewing direction but no farther than 9m.
-    const target = new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3());
+    document.getElementById('tooltip').classList.add('hidden'); // the camera moves away from the cursor
+    const box = new THREE.Box3().setFromObject(object);
+    const target = box.getCenter(new THREE.Vector3());
+    const front = FACING_DIR[object.userData.pick?.data.facing];
+    if (front) {
+      // look at the middle of the front face rather than the inside of the cabinet
+      const half = Math.abs(front.x) ? (box.max.x - box.min.x) / 2 : (box.max.z - box.min.z) / 2;
+      const face = target.clone().addScaledVector(front, half).setY(1.1);
+      stage.flyTo(face, frontView(object, face, front));
+      return;
+    }
+    // No front (sensors, cameras): keep the current viewing direction, but no farther than 9m.
     const offset = camera.position.clone().sub(controls.target);
     offset.setLength(Math.min(offset.length(), 9));
     stage.flyTo(target, target.clone().add(offset));
@@ -161,6 +230,7 @@ const picker = setupPicker({
 
 startMockLive(data.points, (id, reading) => {
   pointSet.updateSensor(id, reading);
+  stage.requestRender();
   const sel = picker.selected?.userData.pick;
   if (sel?.data.id === id) panel.refresh(sel);
 });

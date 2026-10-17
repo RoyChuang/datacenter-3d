@@ -4,7 +4,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 export const BACKGROUND = 0xeef1f4;
 
-// Renderer, camera, controls, lights and the render loop.
+// Renderer, camera, controls, lights and an on-demand render loop: a frame is drawn only when
+// something changed (camera moved, data updated, a layer toggled ...), not continuously.
 export function createStage(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -46,7 +47,12 @@ export function createStage(container) {
       sun.shadow.camera.updateProjectionMatrix();
     }
     renderer.shadowMap.needsUpdate = true;
+    requestRender();
   }
+
+  let dirty = true;
+  function requestRender() { dirty = true; }
+  controls.addEventListener('change', requestRender);
 
   // Smooth camera moves: ease for a fixed number of frames, then snap.
   // Damping fights the lerp near the end, so a distance threshold alone may never be reached.
@@ -57,17 +63,23 @@ export function createStage(container) {
   }
   controls.addEventListener('start', () => { flight = null; }); // user grabbed the camera
 
+  // Tickers run every frame and return true while they are animating something.
   const tickers = [];
+  const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
+    const dt = clock.getDelta();
     if (flight) {
       const last = ++flight.frame >= FLIGHT_FRAMES;
       const k = last ? 1 : 0.15;
       controls.target.lerp(flight.target, k);
       if (flight.position) camera.position.lerp(flight.position, k);
       if (last) flight = null;
+      dirty = true;
     }
-    controls.update();
-    for (const fn of tickers) fn();
+    if (controls.update()) dirty = true; // true while damping is still moving the camera
+    for (const fn of tickers) if (fn(dt)) dirty = true;
+    if (!dirty) return;
+    dirty = false;
     renderer.render(scene, camera);
   });
 
@@ -75,7 +87,8 @@ export function createStage(container) {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
+    requestRender();
   });
 
-  return { renderer, scene, camera, controls, flyTo, refreshShadows, onTick: (fn) => tickers.push(fn) };
+  return { renderer, scene, camera, controls, flyTo, refreshShadows, requestRender, onTick: (fn) => tickers.push(fn) };
 }
