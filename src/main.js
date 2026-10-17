@@ -8,7 +8,7 @@ import { buildPdc } from './builders/pdc.js';
 import { buildUps, buildBattery } from './builders/power.js';
 import { buildPanel } from './builders/panel.js';
 import { buildPowerLayer } from './power/topology.js';
-import { setGhost, setTint } from './power/appearance.js';
+import { setFade, setGhost, setSupplied } from './power/appearance.js';
 import { buildPoints } from './builders/points.js';
 import { buildPlanOverlay } from './builders/planOverlay.js';
 import { setupPicker } from './interaction/picker.js';
@@ -89,17 +89,23 @@ const powerLayer = data.power && buildPowerLayer(data.power, {
   labelOf: (id) => units.get(id)?.item.alias ?? id,
   itemOf: (id) => units.get(id)?.item,
 });
-let tinted = [];
+let supplied = [];
+// Layers that only add clutter in power view; hidden while it is on, then back to their checkbox state.
+const HIDE_IN_POWER_VIEW = ['sensors', 'cameras', 'containment'];
 function showPower(on) {
   // While the layer is on, everything outside the power chain fades back.
   for (const [id, u] of units) setGhost(u.group, on && !powerLayer.nodes.has(id));
+  for (const name of HIDE_IN_POWER_VIEW) {
+    layers[name].visible = !on && document.querySelector(`[data-layer="${name}"]`).checked;
+  }
+  setFade(roomLayers.walls, on ? 0.35 : 1);
   document.getElementById('power-legend').classList.toggle('hidden', !on);
   applyPowerSelection();
 }
 // Light up the selected object's power chain, redundant partner and the racks it supplies.
 function applyPowerSelection() {
-  for (const id of tinted) setTint(units.get(id).group, null);
-  tinted = [];
+  for (const id of supplied) setSupplied(units.get(id).group, false);
+  supplied = [];
   if (!powerLayer?.group.visible) return;
   const id = picker?.selected?.userData.pick.data.id;
   const racks = id ? powerLayer.highlight(id) : (powerLayer.clear(), null);
@@ -107,11 +113,11 @@ function applyPowerSelection() {
     const u = units.get(r);
     if (!u) continue;
     setGhost(u.group, false);
-    setTint(u.group, r === id ? null : 0x60a5fa);
-    tinted.push(r);
+    if (r !== id) setSupplied(u.group, true);
+    supplied.push(r);
   }
   // racks no longer highlighted go back to ghosted
-  for (const [rid, u] of units) if (!powerLayer.nodes.has(rid) && !tinted.includes(rid)) setGhost(u.group, true);
+  for (const [rid, u] of units) if (!powerLayer.nodes.has(rid) && !supplied.includes(rid)) setGhost(u.group, true);
 }
 if (powerLayer) {
   siteRoot.add(powerLayer.group);

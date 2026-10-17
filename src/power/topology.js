@@ -5,9 +5,13 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 
-// A / B feed colours (common dual-feed convention), DC battery links in grey, single-feed warning in amber.
-export const PATH_COLORS = { A: 0x2563eb, B: 0xf97316, dc: 0x6b7280 };
-const WARN = '#d97706';
+// A / B feed colours (common dual-feed convention): deep for trunks (UPS -> PDC), light for branches
+// (PDC -> racks), grey for DC battery links. Single feed is flagged in yellow, clearly apart from B's orange.
+export const PATH_COLORS = { A: 0x1d4ed8, B: 0xea580c, dc: 0x6b7280 };
+const BRANCH_COLORS = { A: 0x93c5fd, B: 0xfdba74 };
+const WARN = '#eab308';
+// Badges for A and B sit at different heights so neighbours (e.g. UPS-A next to UPS-B) don't overlap.
+const BADGE_LIFT = { A: 0.55, B: 0.95 };
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
 const TRAY = { A: 2.85, B: 3.1, dc: 2.35 };
 const STUB = 0.9; // external sources come in from above as a short vertical stub
@@ -18,7 +22,7 @@ const BRANCH = { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const pathOf = (edge) => edge.path ?? 'dc';
 
-function textSprite(text, { bg, fg = '#ffffff', height = 0.22 }) {
+function textSprite(text, { bg, fg = '#ffffff', height = 0.3 }) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const font = 'bold 40px system-ui, sans-serif';
@@ -91,10 +95,10 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       pts = route(from, to, TRAY[key]);
     }
     const geometry = new LineGeometry().setPositions(pts.flatMap((p) => [p.x, p.y, p.z]));
-    const base = new Line2(geometry, new LineMaterial({ color: PATH_COLORS[key], linewidth: key === 'dc' ? 2 : 3.5, transparent: true, opacity: 0.85 }));
+    const base = new Line2(geometry, new LineMaterial({ color: PATH_COLORS[key], linewidth: key === 'dc' ? 2 : 4.5, transparent: true, opacity: 0.9 }));
     // Moving dashes on top show the direction of power flow.
     const flow = new Line2(geometry, new LineMaterial({
-      color: 0xffffff, linewidth: key === 'dc' ? 1.5 : 2, dashed: true, dashSize: 0.18, gapSize: 0.6, transparent: true, opacity: 0.85,
+      color: 0xffffff, linewidth: key === 'dc' ? 1.5 : 2.2, dashed: true, dashSize: 0.18, gapSize: 0.6, transparent: true, opacity: 0.85,
     }));
     flow.computeLineDistances();
     flow.renderOrder = 1;
@@ -111,10 +115,19 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     const incoming = edges.filter((e) => e.to === id);
     const paths = [...new Set((incoming.length ? incoming : edges).map((e) => e.path))].sort();
     const isSingle = single.has(id);
-    const text = isSingle ? `${paths.join('+')} 路 · 單路` : labelOf(id) !== id ? labelOf(id) : `${paths.join('+')} 路`;
-    const badge = textSprite(text, { bg: isSingle ? WARN : hex(PATH_COLORS[paths[0]]) });
-    badge.position.copy(anchor).add(new THREE.Vector3(0, 0.3, 0));
-    group.add(badge);
+    const path = paths.join('+');
+    // an alias like "UPS-A" already says the path; otherwise "PDC1 · A"
+    const name = labelOf(id) !== id ? labelOf(id) : `${id} · ${path}`;
+    const text = isSingle ? `⚠ ${name} 單路` : name;
+    const badge = textSprite(text, { bg: isSingle ? WARN : hex(PATH_COLORS[paths[0]]), fg: isSingle ? '#1f2933' : '#ffffff' });
+    const top = anchor.clone().add(new THREE.Vector3(0, BADGE_LIFT[paths[0]] ?? 0.55, 0));
+    badge.position.copy(top).add(new THREE.Vector3(0, 0.15, 0));
+    // thin leader line from the equipment up to its raised badge
+    const leader = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([anchor, top]),
+      new THREE.LineBasicMaterial({ color: PATH_COLORS[paths[0]], transparent: true, opacity: 0.6 }),
+    );
+    group.add(leader, badge);
   }
 
   // ---------- PDC -> rack branches ----------
@@ -151,9 +164,9 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     }
     if (!segments.length) continue;
     const geometry = new LineSegmentsGeometry().setPositions(segments);
-    const base = new LineSegments2(geometry, new LineMaterial({ color: PATH_COLORS[path], linewidth: 1.6, transparent: true, opacity: 0.6 }));
+    const base = new LineSegments2(geometry, new LineMaterial({ color: BRANCH_COLORS[path], linewidth: 1.3, transparent: true, opacity: 0.8 }));
     const flow = new LineSegments2(geometry, new LineMaterial({
-      color: 0xffffff, linewidth: 1.2, dashed: true, dashSize: 0.12, gapSize: 0.4, transparent: true, opacity: 0.7,
+      color: 0xffffff, linewidth: 1, dashed: true, dashSize: 0.12, gapSize: 0.4, transparent: true, opacity: 0.6,
     }));
     flow.computeLineDistances();
     flow.renderOrder = 1;
@@ -181,15 +194,15 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   const inGraph = (id) => up.has(id) || down.has(id);
 
   function styleBranch(entry, state) {
-    entry.base.material.opacity = { active: 1, partner: 0.6, dim: 0.06, normal: 0.6 }[state];
-    entry.base.material.linewidth = state === 'active' ? 2.6 : 1.6;
+    entry.base.material.opacity = { active: 1, partner: 0.6, dim: 0.06, normal: 0.8 }[state];
+    entry.base.material.linewidth = state === 'active' ? 2.2 : 1.3;
     entry.flow.visible = state !== 'dim';
   }
 
   function style(entry, state) {
     const { base, flow } = entry;
-    base.material.opacity = { active: 1, partner: 0.75, dim: 0.08, normal: 0.85 }[state];
-    base.material.linewidth = state === 'active' ? 5 : pathOf(entry.edge) === 'dc' ? 2 : 3.5;
+    base.material.opacity = { active: 1, partner: 0.75, dim: 0.08, normal: 0.9 }[state];
+    base.material.linewidth = pathOf(entry.edge) === 'dc' ? 2 : state === 'active' ? 6.5 : 4.5;
     flow.visible = state !== 'dim';
     flow.material.opacity = state === 'partner' ? 0.5 : 0.85;
   }
