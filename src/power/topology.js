@@ -1,9 +1,5 @@
 import * as THREE from 'three';
-import { Line2 } from 'three/addons/lines/Line2.js';
-import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // A / B feed colours (common dual-feed convention), used for trunks (UPS -> PDC) and branches (PDC -> racks)
 // alike — branches are only thinner; grey for DC battery links.
@@ -13,9 +9,66 @@ const BADGE_LIFT = { A: 0.55, B: 0.95 };
 // Schematic overhead routing heights (m): above racks and walls, A and B on separate levels.
 const TRAY = { A: 2.85, B: 3.1, dc: 2.35 };
 const STUB = 0.9; // external sources come in from above as a short vertical stub
-// PDC branches: a busway along each row just above the cabinets, then a drop into every rack and
-// in-row cooler it serves. A and B run on opposite sides of the cabinet top, like the A/B PDUs in a rack.
+// PDC branches: a busway along each row just above the cabinets it serves (racks and in-row coolers).
+// A and B run on opposite sides of the cabinet top, like the A/B PDUs in a rack.
 const BRANCH = { A: { height: 2.2, side: -0.3 }, B: { height: 2.35, side: 0.3 } };
+
+// Trunks (UPS -> PDC) and busways are drawn as lit tubes (radius in m).
+const TUBE = { trunk: 0.025, dc: 0.015, busway: 0.018 };
+// Soft pulses travel along the tubes in the direction of power flow (spacing m, speed m/s).
+const PULSE = { trunk: { spacing: 1.6, speed: 0.9 }, busway: { spacing: 1.2, speed: 0.6 } };
+const flowTime = { value: 0 }; // shared by every tube material
+
+// A polyline as one tube: a cylinder per segment and a ball at each bend and end, merged. Each vertex
+// carries its distance along the polyline (aDist) for the pulse shader.
+function tubeGeometry(pts, radius) {
+  const parts = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  const ball = (p, dist) => {
+    const g = new THREE.SphereGeometry(radius, 12, 8);
+    g.setAttribute('aDist', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(dist), 1));
+    g.translate(p.x, p.y, p.z);
+    parts.push(g);
+  };
+  let dist = 0;
+  ball(pts[0], 0);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const len = a.distanceTo(b);
+    if (len < 1e-6) continue;
+    const g = new THREE.CylinderGeometry(radius, radius, len, 12, 1, true);
+    const d = new Float32Array(g.attributes.position.count);
+    for (let v = 0; v < d.length; v++) d[v] = g.attributes.position.getY(v) > 0 ? dist + len : dist;
+    g.setAttribute('aDist', new THREE.BufferAttribute(d, 1));
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, b.clone().sub(a).normalize()));
+    g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    parts.push(g);
+    dist += len;
+    ball(b, dist);
+  }
+  return parts.length > 1 ? mergeGeometries(parts) : null;
+}
+
+// Lit tube in the path colour with a faint self-glow and soft bright pulses moving along aDist.
+function tube(pts, radius, color, { spacing, speed }) {
+  const geometry = tubeGeometry(pts, radius);
+  if (!geometry) return null;
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.95 });
+  const uniforms = { uTime: flowTime, uPulse: { value: 1 }, uGlow: { value: 0.25 }, uSpacing: { value: spacing }, uSpeed: { value: speed } };
+  material.userData.uniforms = uniforms;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = `attribute float aDist;\nvarying float vDist;\n${shader.vertexShader}`
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vDist = aDist;');
+    shader.fragmentShader = `uniform float uTime, uPulse, uGlow, uSpacing, uSpeed;\nvarying float vDist;\n${shader.fragmentShader}`
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  float phase = fract((vDist - uTime * uSpeed) / uSpacing);
+  float pulse = smoothstep(0.0, 0.2, phase) * (1.0 - smoothstep(0.2, 0.5, phase));
+  totalEmissiveRadiance += diffuseColor.rgb * uGlow + mix(diffuseColor.rgb, vec3(1.0), 0.55) * pulse * uPulse;`);
+  };
+  return new THREE.Mesh(geometry, material);
+}
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 const pathOf = (edge) => edge.path ?? 'dc';
@@ -78,7 +131,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   const servedBy = (rackId) => Object.keys(power.serves).filter((id) => power.serves[id].includes(rackId));
 
   // ---------- lines ----------
-  const lines = new Map(); // edge id -> { base, flow }
+  const lines = new Map(); // edge id -> { base, edge }
   for (const e of power.edges) {
     const to = anchorOf(e.to);
     if (!to) continue;
@@ -95,16 +148,10 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       if (!from) continue;
       pts = route(from, to, TRAY[key]);
     }
-    const geometry = new LineGeometry().setPositions(pts.flatMap((p) => [p.x, p.y, p.z]));
-    const base = new Line2(geometry, new LineMaterial({ color: PATH_COLORS[key], linewidth: key === 'dc' ? 2 : 4.5, transparent: true, opacity: 0.9 }));
-    // Moving dashes on top show the direction of power flow.
-    const flow = new Line2(geometry, new LineMaterial({
-      color: 0xffffff, linewidth: key === 'dc' ? 1.5 : 2.2, dashed: true, dashSize: 0.18, gapSize: 0.6, transparent: true, opacity: 0.85,
-    }));
-    flow.computeLineDistances();
-    flow.renderOrder = 1;
-    group.add(base, flow);
-    lines.set(e.id, { base, flow, edge: e });
+    const base = tube(pts, key === 'dc' ? TUBE.dc : TUBE.trunk, PATH_COLORS[key], PULSE.trunk);
+    if (!base) continue;
+    group.add(base);
+    lines.set(e.id, { base, edge: e });
   }
 
   // ---------- badges: name and path of each node ----------
@@ -130,14 +177,13 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   }
 
   // ---------- PDC -> rack branches ----------
-  const branches = new Map(); // feeder id -> { base, flow, path }
+  const branches = new Map(); // feeder id -> { busways, path }
   for (const [id, racks] of Object.entries(power.serves)) {
     const source = anchorOf(id);
     if (!source || !racks.length) continue;
     const path = (up.get(id) ?? []).find((e) => e.path)?.path ?? 'A';
     const { height: h, side } = BRANCH[path];
-    const segments = [];
-    const seg = (a, b) => segments.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    const busways = []; // feed run + busway of each row
 
     const byRow = new Map();
     for (const r of racks) {
@@ -147,7 +193,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       if (!byRow.has(row)) byRow.set(row, []);
       byRow.get(row).push(top);
     }
-    // Each row's busway: the line along its cabinets (`side` metres off the centre line) and a drop per cabinet.
+    // Each row's busway: the run along its cabinets, `side` metres off the centre line.
     const rows = [...byRow.values()].map((tops) => {
       const alongZ = Math.max(...tops.map((t) => t.x)) - Math.min(...tops.map((t) => t.x)) < 0.01;
       const off = alongZ ? new THREE.Vector3(side, 0, 0) : new THREE.Vector3(0, 0, side);
@@ -172,22 +218,13 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
       const { row, end, from } = best;
       rows.splice(rows.indexOf(row), 1);
       const start = row.ends[end];
-      const feed = route(from, start, h);
-      for (let i = 1; i < feed.length; i++) seg(feed[i - 1], feed[i]);
-      seg(start, row.ends[1 - end]);
-      for (const t of row.sorted) seg(t.clone().add(row.off).setY(h), t.clone().add(row.off));
+      const busway = tube([...route(from, start, h), row.ends[1 - end]], TUBE.busway, PATH_COLORS[path], PULSE.busway);
+      if (busway) busways.push(busway);
       wired.push(start);
     }
-    if (!segments.length) continue;
-    const geometry = new LineSegmentsGeometry().setPositions(segments);
-    const base = new LineSegments2(geometry, new LineMaterial({ color: PATH_COLORS[path], linewidth: 1.3, transparent: true, opacity: 1 }));
-    const flow = new LineSegments2(geometry, new LineMaterial({
-      color: 0xffffff, linewidth: 1, dashed: true, dashSize: 0.12, gapSize: 0.4, transparent: true, opacity: 0.6,
-    }));
-    flow.computeLineDistances();
-    flow.renderOrder = 1;
-    group.add(base, flow);
-    branches.set(id, { base, flow, path });
+    if (!busways.length) continue;
+    group.add(...busways);
+    branches.set(id, { busways, path });
   }
 
   // ---------- tracing ----------
@@ -209,18 +246,20 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
   };
   const inGraph = (id) => up.has(id) || down.has(id);
 
+  function styleTube(mesh, state) {
+    const m = mesh.material;
+    m.opacity = { active: 1, partner: 0.6, dim: 0.07, normal: 0.95 }[state];
+    m.depthWrite = state !== 'dim'; // a faded tube must not hide the ones behind it
+    m.userData.uniforms.uGlow.value = state === 'active' ? 0.6 : 0.25;
+    m.userData.uniforms.uPulse.value = { active: 1.2, partner: 0.6, dim: 0, normal: 1 }[state];
+  }
+
   function styleBranch(entry, state) {
-    entry.base.material.opacity = { active: 1, partner: 0.6, dim: 0.06, normal: 1 }[state];
-    entry.base.material.linewidth = state === 'active' ? 2.2 : 1.3;
-    entry.flow.visible = state !== 'dim';
+    for (const b of entry.busways) styleTube(b, state);
   }
 
   function style(entry, state) {
-    const { base, flow } = entry;
-    base.material.opacity = { active: 1, partner: 0.75, dim: 0.08, normal: 0.9 }[state];
-    base.material.linewidth = pathOf(entry.edge) === 'dc' ? 2 : state === 'active' ? 6.5 : 4.5;
-    flow.visible = state !== 'dim';
-    flow.material.opacity = state === 'partner' ? 0.5 : 0.85;
+    styleTube(entry.base, state);
   }
 
   /** Highlight what matters for `id`. Returns the racks it supplies (for tinting), or null if not power-related. */
@@ -293,8 +332,7 @@ export function buildPowerLayer(power, { anchorOf, labelOf, itemOf }) {
     clear,
     section,
     tick(dt) {
-      for (const { flow } of lines.values()) flow.material.dashOffset -= dt * 0.9;
-      for (const { flow } of branches.values()) flow.material.dashOffset -= dt * 0.6;
+      flowTime.value += dt;
     },
   };
 }
