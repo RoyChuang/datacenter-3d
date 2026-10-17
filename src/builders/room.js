@@ -172,7 +172,9 @@ export function buildRoom(room, rackTopY) {
     roof.add(new THREE.LineSegments(new THREE.EdgesGeometry(roof.geometry), roofFrame));
     containment.add(roof);
   }
-  group.add(containment);
+  // Nested under the walls, so hiding walls / doors takes the roofs with it; the roofs can still be
+  // hidden on their own while the walls are shown.
+  walls.add(containment);
 
   return { group, layers: { walls, containment } };
 }
