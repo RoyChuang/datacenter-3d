@@ -167,15 +167,22 @@ document.querySelector('#heat-legend .heat-bar').style.background = `linear-grad
 document.querySelector('#heat-legend .legend-title').textContent = `溫度（離地 ${heatHeight} m）`;
 
 // ---------- airflow ----------
-const airflow = buildAirflow({
-  containments: room.containments,
-  racks: data.racks,
-  coolers: data.rowcools,
-  depth: { rack: types.rack.depth, rowcool: types.rowcool.depth },
-});
-siteRoot.add(airflow.group);
-layers.airflow = airflow.group;
-const airflowOn = () => airflow.group.visible;
+// Only built when the site declares a layout the model supports (site.yaml `airflow`); otherwise the
+// layer and its checkbox are left out instead of showing a wrong flow.
+const airflow = site.airflow === 'cold-aisle'
+  ? buildAirflow({
+    containments: room.containments,
+    racks: data.racks,
+    coolers: data.rowcools,
+    depth: { rack: types.rack.depth, rowcool: types.rowcool.depth },
+  })
+  : null;
+if (airflow) {
+  siteRoot.add(airflow.group);
+  layers.airflow = airflow.group;
+  animateWhileVisible(airflow.group, (dt) => airflow.tick(dt));
+}
+const airflowOn = () => !!airflow?.group.visible;
 const isCooler = (id) => data.rowcools.some((c) => c.id === id);
 function showAirflow(on) {
   // racks fade so the arrows show through them; the coolers driving the flow stay solid
@@ -187,9 +194,8 @@ function showAirflow(on) {
 }
 // Selecting a rack or cooler narrows the arrows to the loops it takes part in.
 function applyAirflowSelection() {
-  airflow.setFocus(airflowOn() ? picker?.selected?.userData.pick.data.id ?? null : null);
+  airflow?.setFocus(airflowOn() ? picker?.selected?.userData.pick.data.id ?? null : null);
 }
-animateWhileVisible(airflow.group, (dt) => airflow.tick(dt));
 
 const planUrl = site.plan && planImages[`../sites/${siteId}/${site.plan.image}`];
 if (planUrl) {
@@ -292,7 +298,7 @@ startMockLive(data.points, (id, reading) => {
   stage.requestRender();
   const sel = picker.selected?.userData.pick;
   if (sel?.data.id === id) panel.refresh(sel);
-});
+}, { hotSpots: site.mockHotSpots });
 
 // ---------- toolbar ----------
 // Analysis views each take over the scene, so only one can be on at a time.

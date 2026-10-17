@@ -1,11 +1,10 @@
 // Stand-in for a real telemetry feed (WebSocket / MQTT / REST polling).
 // Calls onReading(id, { temp, humidity, time }) for every sensor at a fixed interval.
-// A few fixed hot spots keep warning / alarm states visible in the demo.
-const HOT_SPOTS = { 6: 28.6, 23: 28.9, 31: 31.2 }; // sensor index -> typical temperature
-
-export function startMockLive(points, onReading, intervalMs = 2000) {
+// `hotSpots` (sensor id -> typical °C, from site.yaml `mock.hotSpots`) keeps warning / alarm states visible
+// in a demo; without it every sensor wanders around a normal room temperature.
+export function startMockLive(points, onReading, { hotSpots = {}, intervalMs = 2000 } = {}) {
   const sensors = points.filter((p) => p.type === 'sensor');
-  const base = new Map(sensors.map((s, i) => [s.id, HOT_SPOTS[i] ?? 22.5 + Math.random() * 2.5]));
+  const base = new Map(sensors.map((s) => [s.id, hotSpots[s.id] ?? 22.5 + Math.random() * 2.5]));
   const state = new Map(sensors.map((s) => [s.id, { temp: base.get(s.id), humidity: 45 + Math.random() * 10 }]));
 
   const tick = () => {

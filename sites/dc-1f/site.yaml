@@ -12,13 +12,16 @@ grid:
   rows: 22.5           # 房間深（格）
 
 plan:
-  image: plan.png
-  pxPerTile: 31        # 平面圖上一格幾個像素
-  originPx: [0, 0]     # 格座標 (0,0) 在圖上的像素位置
+  image: plan.webp
+  pxPerTile: 43.73     # 平面圖上一格幾個像素（以 25 個色塊擬合，橫縱相同）
+  originPx: [53.3, 46.6]   # 格座標 (0,0) 在圖上的像素位置
 
 wallHeight: 2600
 perimeter: true        # 自動產生外牆
 mockDevices: true      # 機櫃內容先用假資料
+airflow: cold-aisle    # 冷通道封閉＋列間空調（使用者確認，2026-10-17）
+mock:
+  hotSpots: { TH-07: 28.6, TH-24: 28.9, TH-32: 31.2 }   # 展示用：固定偏熱的感測器
 
 # ---------- 牆：[x1, z1, x2, z2]，門會自動把牆切開 ----------
 walls:

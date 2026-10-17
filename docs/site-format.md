@@ -13,7 +13,15 @@ plan: { image: plan.png, pxPerTile: 31, originPx: [0, 0] }
 wallHeight: 2600         # mm
 perimeter: true          # 自動產生外牆
 mockDevices: true        # 沒有 devices.json 時用假資料填機櫃
+airflow: cold-aisle      # 冷卻方式：cold-aisle / hot-aisle / none（目前只有 cold-aisle 會產生氣流圖層）
+mock:                    # （選用）展示用：固定偏熱的感測器，其餘在常溫附近變動
+  hotSpots: { TH-07: 28.6, TH-32: 31.2 }
 ```
+
+| 欄位 | 說明 |
+|---|---|
+| `airflow` | `cold-aisle`：冷通道封閉＋列間空調，會產生氣流圖層。`hot-aisle`、`none` 或未設定：不顯示氣流圖層（會有警告）。其他值是錯誤 |
+| `mock.hotSpots` | 感測器編號 → 典型溫度（°C）。只影響假資料；接上真實資料後就不需要 |
 
 ## rows：設備排
 

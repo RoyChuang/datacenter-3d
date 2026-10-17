@@ -23,6 +23,10 @@ export const DEFAULT_TYPE_RULES = [
 
 const OUTPUT_FOR_TYPE = { rack: 'racks', rowcool: 'rowcools', pdc: 'pdcs', ups: 'ups', battery: 'batteries', panel: 'panels' };
 const POWER_PATHS = ['A', 'B'];
+// Airflow models the viewer can draw. Other layouts (hot-aisle containment, room CRAC units ...) are not
+// modelled yet; they are accepted but the airflow layer is left out rather than drawn wrongly.
+const AIRFLOW_SUPPORTED = ['cold-aisle'];
+const AIRFLOW_KNOWN = ['cold-aisle', 'hot-aisle', 'none'];
 const PERIMETER_THICKNESS = 0.2; // m
 const AISLE_DOOR_THICKNESS = 0.1; // m
 const EPS = 0.005; // m — overlaps smaller than this are ignored
@@ -153,6 +157,16 @@ export function compileSite(site, { devices: realDevices } = {}) {
     for (const id of Object.keys(site[key] ?? {})) if (!known.has(id)) warnings.push(`${key}.${id}：沒有這台設備（打錯字？）`);
   }
 
+  if (site.airflow != null && !AIRFLOW_KNOWN.includes(site.airflow)) {
+    errors.push(`airflow: 必須是 ${AIRFLOW_KNOWN.join(' / ')}（目前是 "${site.airflow}"）`);
+  } else if (!AIRFLOW_SUPPORTED.includes(site.airflow)) {
+    warnings.push(`airflow: ${site.airflow ?? '未設定'}，不顯示氣流圖層（目前只支援 ${AIRFLOW_SUPPORTED.join(' / ')}）`);
+  }
+  const sensorIds = new Set(points.filter((p) => p.type === 'sensor').map((p) => p.id));
+  for (const id of Object.keys(site.mock?.hotSpots ?? {})) {
+    if (!sensorIds.has(id)) warnings.push(`mock.hotSpots.${id}：沒有這個感測器`);
+  }
+
   for (const [prefix, nums] of numberSequences(equipment.map((e) => e.id))) {
     const max = Math.max(...nums);
     const missing = [];
@@ -176,6 +190,8 @@ export function compileSite(site, { devices: realDevices } = {}) {
     site: {
       id: site.id, name: site.name ?? site.id,
       plan: site.plan ? { image: site.plan.image, pxPerTile: site.plan.pxPerTile, originPx: site.plan.originPx ?? [0, 0] } : null,
+      airflow: AIRFLOW_SUPPORTED.includes(site.airflow) ? site.airflow : null,
+      mockHotSpots: site.mock?.hotSpots ?? {},
     },
     room: { name: site.name, tileSize: T, width, depth, wallHeight: r3((site.wallHeight ?? 2600) / 1000), walls, doors, containments },
     'equipment-types': runtimeTypes(types),

@@ -21,7 +21,7 @@ npm run build      # 正式打包（驗證失敗會中止）
 ```
 sites/<id>/
   site.yaml             ← 唯一手動維護的檔案
-  plan.png              原始平面圖（疊圖比對用）
+  plan.webp             原始平面圖（疊圖比對用）
   devices.json          （選用）真實機櫃內容
   notes.md              判讀紀錄（假設與已確認事項）
 scripts/
