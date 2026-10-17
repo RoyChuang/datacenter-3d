@@ -7,11 +7,19 @@ import * as THREE from 'three';
 
 const COLD = new THREE.Color('#3b82f6');
 const HOT = new THREE.Color('#ef4444');
-const HEIGHTS = [0.5, 1.1, 1.7]; // one loop per height, so the flow fills the cabinet face
-const PER_LOOP = 12; // mist puffs travelling each loop
-const PUFF_SIZE = 0.9; // m — large and faint, so neighbouring puffs merge into a haze
-const DRIFT = 0.3; // m — how far a puff may sit off its loop
-const SPEED = 0.6; // m/s along the loop
+const HEIGHTS = [0.7, 1.5]; // one loop per height, so the flow covers the cabinet face
+const PER_LOOP = 4; // mist puffs travelling each loop
+// Each puff is a dense head followed by fainter, smaller trailing blobs, so the flow direction reads
+// at a glance. Kept to ~2,000 points in total; tails are small, so the pixel cost stays low too.
+const TRAIL = [ // [size m, opacity] from head to tail
+  [0.42, 0.45],
+  [0.34, 0.28],
+  [0.26, 0.16],
+  [0.19, 0.08],
+];
+const TRAIL_GAP = 0.2; // m between blobs of one puff — far enough apart that the tail reads as a tail
+const DRIFT = 0.25; // m — how far a puff may sit off its loop
+const SPEED = 0.8; // m/s along the loop
 
 // A round, soft-edged blob used for every puff.
 function puffTexture() {
@@ -80,19 +88,56 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
   }
 
   // ---------- mist ----------
-  // Each puff is a soft, semi-transparent blob drifting a little off the loop, so many of them
-  // together read as a stream of air rather than as discrete markers.
-  const count = loops.length * PER_LOOP;
+  const blobs = TRAIL.length;
+  const count = loops.length * PER_LOOP * blobs;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const alphas = new Float32Array(count);
+  for (let i = 0; i < count; i++) [sizes[i], alphas[i]] = TRAIL[i % blobs]; // fixed per blob, uploaded once
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const points = new THREE.Points(geometry, new THREE.PointsMaterial({
-    size: PUFF_SIZE, map: puffTexture(), vertexColors: true, transparent: true, opacity: 0.2,
-    depthWrite: false, toneMapped: false,
-  }));
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage));
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+  // Points with per-point size (metres, perspective-scaled) and opacity — PointsMaterial has neither.
+  const material = new THREE.ShaderMaterial({
+    uniforms: { map: { value: puffTexture() }, scale: { value: 1 } },
+    vertexShader: `
+      attribute float size;
+      attribute float alpha;
+      attribute vec3 color;
+      uniform float scale;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vColor = color;
+        vAlpha = alpha;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * scale / -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D map;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        float a = texture2D(map, gl_PointCoord).a * vAlpha;
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(vColor, a);
+        #include <colorspace_fragment>
+      }`,
+    transparent: true,
+    depthWrite: false,
+  });
+  const points = new THREE.Points(geometry, material);
   points.frustumCulled = false;
+  // pixels per metre at distance 1, from the current viewport and field of view
+  points.onBeforeRender = (renderer, scene, camera) => {
+    material.uniforms.scale.value = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  };
+
   const particles = [];
   loops.forEach((loop, li) => {
     for (let k = 0; k < PER_LOOP; k++) {
@@ -101,7 +146,7 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
         s: ((k + Math.random()) / PER_LOOP) * loop.total,
         // fixed random drift away from the loop, so puffs spread into a soft band
         drift: new THREE.Vector3((Math.random() - 0.5) * DRIFT, (Math.random() - 0.5) * DRIFT, (Math.random() - 0.5) * DRIFT),
-        index: li * PER_LOOP + k,
+        first: (li * PER_LOOP + k) * blobs,
       });
     }
   });
@@ -115,27 +160,32 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
   const color = new THREE.Color();
   let focus = null; // show only loops involving this rack / cooler
 
-  function place(p) {
-    const { loop } = p;
-    const o = p.index * 3;
-    if (focus && loop.rack !== focus && loop.cooler !== focus) {
-      positions[o + 1] = -1000; // parked out of sight
-      return;
-    }
+  // Write the point at distance `s` along `loop` into slot `index`.
+  function write(loop, s, drift, index) {
     let i = 1;
-    while (i < loop.lengths.length - 1 && p.s > loop.lengths[i]) i++;
+    while (i < loop.lengths.length - 1 && s > loop.lengths[i]) i++;
     const [a, ta] = loop.points[i - 1];
     const [b, tb] = loop.points[i];
-    const seg = loop.lengths[i] - loop.lengths[i - 1] || 1;
-    const k = (p.s - loop.lengths[i - 1]) / seg;
-    pos.lerpVectors(a, b, k).add(p.drift);
+    const k = (s - loop.lengths[i - 1]) / (loop.lengths[i] - loop.lengths[i - 1] || 1);
+    pos.lerpVectors(a, b, k).add(drift);
+    color.lerpColors(COLD, HOT, ta + (tb - ta) * k);
+    const o = index * 3;
     positions[o] = pos.x;
     positions[o + 1] = pos.y;
     positions[o + 2] = pos.z;
-    color.lerpColors(COLD, HOT, ta + (tb - ta) * k);
     colors[o] = color.r;
     colors[o + 1] = color.g;
     colors[o + 2] = color.b;
+  }
+
+  function place(p) {
+    const { loop } = p;
+    const hide = focus && loop.rack !== focus && loop.cooler !== focus;
+    for (let b = 0; b < blobs; b++) {
+      if (hide) { positions[(p.first + b) * 3 + 1] = -1000; continue; } // parked out of sight
+      const s = (((p.s - b * TRAIL_GAP) % loop.total) + loop.total) % loop.total; // tail lags behind the head
+      write(loop, s, p.drift, p.first + b);
+    }
   }
 
   function tick(dt) {
