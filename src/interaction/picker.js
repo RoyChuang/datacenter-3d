@@ -17,24 +17,50 @@ function pickRoot(object) {
   return o;
 }
 
-// The 12 edges of a box as line-segment pairs.
-function boxEdges(box) {
+// Which faces of an axis-aligned box face the eye: [x-, x+, y-, y+, z-, z+].
+function facesSeen(box, eye) {
+  const { min, max } = box;
+  return [eye.x < min.x, eye.x > max.x, eye.y < min.y, eye.y > max.y, eye.z < min.z, eye.z > max.z];
+}
+
+// The box edges seen from `eye`, as line-segment pairs. An edge is kept when at least one of the two faces
+// it borders faces the eye; the edges behind the box itself (both faces turned away) are left out.
+function visibleBoxEdges(box, eye) {
   const { min: a, max: b } = box;
-  const c = [[a.x, a.y, a.z], [b.x, a.y, a.z], [b.x, a.y, b.z], [a.x, a.y, b.z], [a.x, b.y, a.z], [b.x, b.y, a.z], [b.x, b.y, b.z], [a.x, b.y, b.z]];
-  const pairs = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
-  return pairs.flatMap(([i, j]) => [...c[i], ...c[j]]);
+  const seen = facesSeen(box, eye);
+  const X = [a.x, b.x];
+  const Y = [a.y, b.y];
+  const Z = [a.z, b.z];
+  const out = [];
+  // face index for "x = X[i]" is i, "y = Y[j]" is 2 + j, "z = Z[k]" is 4 + k
+  for (const j of [0, 1]) for (const k of [0, 1]) if (seen[2 + j] || seen[4 + k]) out.push(X[0], Y[j], Z[k], X[1], Y[j], Z[k]);
+  for (const i of [0, 1]) for (const k of [0, 1]) if (seen[i] || seen[4 + k]) out.push(X[i], Y[0], Z[k], X[i], Y[1], Z[k]);
+  for (const i of [0, 1]) for (const j of [0, 1]) if (seen[i] || seen[2 + j]) out.push(X[i], Y[j], Z[0], X[i], Y[j], Z[1]);
+  return out;
 }
 
 // Hover outline + tooltip, click to select, double-click to focus. Drags (orbiting) don't count as clicks.
-export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect, onFocus, requestRender }) {
+export function setupPicker({ camera, controls, scene, dom, targets, tooltip, onSelect, onFocus, requestRender }) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const hoverBox = new THREE.BoxHelper(undefined, 0x3b82f6);
   hoverBox.visible = false;
-  // Selection: a thick amber outline drawn on top of everything, so it stays visible behind walls and neighbours.
+  // Selection: a thick amber outline drawn on top of everything, so neighbours and walls never hide it.
+  // Only the object's own back edges are left out (recomputed as the camera moves).
   const selectBox = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: 0xf59e0b, linewidth: 3.5, depthTest: false }));
   selectBox.renderOrder = 30;
   selectBox.visible = false;
+  let selectedBox = null;
+  let seenKey = '';
+  function updateOutline(force = false) {
+    if (!selectedBox) return;
+    const key = facesSeen(selectedBox, camera.position).join();
+    if (!force && key === seenKey) return; // the set of visible edges only changes when a face turns
+    seenKey = key;
+    selectBox.geometry.dispose();
+    selectBox.geometry = new LineSegmentsGeometry().setPositions(visibleBoxEdges(selectedBox, camera.position));
+  }
+  controls.addEventListener('change', () => updateOutline());
   scene.add(hoverBox, selectBox);
 
   let hovered = null;
@@ -84,11 +110,9 @@ export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect, on
   function select(object) {
     selected = object;
     selectBox.visible = !!object;
-    if (object) {
-      const box = new THREE.Box3().setFromObject(object).expandByScalar(0.03);
-      selectBox.geometry.dispose();
-      selectBox.geometry = new LineSegmentsGeometry().setPositions(boxEdges(box));
-    }
+    // exactly the model's bounds: the outline is drawn on top, so it needs no margin against z-fighting
+    selectedBox = object ? new THREE.Box3().setFromObject(object) : null;
+    updateOutline(true);
     hoverBox.visible = false;
     onSelect(object);
     requestRender();

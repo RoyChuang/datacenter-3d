@@ -253,6 +253,7 @@ const panel = createPanel(document.getElementById('panel'), {
 });
 const picker = setupPicker({
   camera,
+  controls,
   scene,
   dom: stage.renderer.domElement,
   // walls are included only so they can block picks behind them
