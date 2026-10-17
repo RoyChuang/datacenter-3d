@@ -61,7 +61,8 @@ export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect, on
     requestRender();
     tooltip.classList.toggle('hidden', !hovered);
     if (hovered) {
-      tooltip.textContent = hovered.userData.pick.data.id;
+      const { data, live } = hovered.userData.pick;
+      tooltip.textContent = live ? `${data.id} · ${live.temp.toFixed(1)}°C` : data.id;
       tooltip.style.left = `${event.clientX}px`;
       tooltip.style.top = `${event.clientY}px`;
     }
