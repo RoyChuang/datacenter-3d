@@ -1,27 +1,19 @@
 import { cabinet, canvasTexture, labelTexture, unit } from './common.js';
+import { door, handle, led, louvres, screen } from './panels.js';
 
-// Power distribution cabinet: meter panel on top, rows of breakers below.
+// Power distribution cabinet: meter display and indicator lamps, plain door, vents at the bottom.
 function frontTexture(width, height) {
-  const ppm = 200;
+  const ppm = 220;
   const w = Math.round(width * ppm);
   const h = Math.round(height * ppm);
   return canvasTexture(w, h, (ctx) => {
-    ctx.fillStyle = '#3552c4';
-    ctx.fillRect(0, 0, w, h);
-    const pad = w * 0.1;
-    ctx.fillStyle = '#0d1733';
-    ctx.fillRect(pad, h * 0.06, w - pad * 2, h * 0.1);
-    ctx.fillStyle = '#ffb347';
-    ctx.font = `${w * 0.1}px monospace`;
-    ctx.fillText('380V  42.1kW', pad + 6, h * 0.125);
-    ctx.fillStyle = '#25389a';
-    ctx.fillRect(pad, h * 0.22, w - pad * 2, h * 0.68);
-    ctx.fillStyle = '#d9dee8';
-    for (let r = 0; r < 12; r++) {
-      for (let c = 0; c < 8; c++) {
-        ctx.fillRect(pad + 8 + c * ((w - pad * 2 - 16) / 8), h * 0.25 + r * h * 0.053, 8, h * 0.035);
-      }
-    }
+    door(ctx, w, h);
+    const pad = w * 0.14;
+    screen(ctx, pad, h * 0.08, w * 0.5, h * 0.07, ['380V', '42.1kW'], '#ffd48a');
+    led(ctx, w * 0.75, h * 0.1, '#3ddc84');
+    led(ctx, w * 0.75, h * 0.13, '#9aa1a9');
+    handle(ctx, w * 0.84, h * 0.4, h * 0.12);
+    louvres(ctx, pad, h * 0.8, w - pad * 2, h * 0.12);
   });
 }
 
@@ -32,7 +24,7 @@ export function buildPdc(item, spec) {
     height: spec.height,
     color: spec.color,
     front: frontTexture(item.width, spec.height),
-    top: labelTexture(item.id, { width: item.width, depth: spec.depth, bg: '#3552c4', facing: item.facing }),
+    top: labelTexture(item.id, { width: item.width, depth: spec.depth, bg: spec.color, fg: '#2b3036', facing: item.facing }),
   });
   return unit(item, 'pdc', mesh);
 }

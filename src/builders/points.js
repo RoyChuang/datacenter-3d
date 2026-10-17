@@ -7,23 +7,31 @@ export const TEMP_LEVELS = [
 ];
 export const tempLevel = (t) => TEMP_LEVELS.find((l) => t <= l.max);
 
+const WHITE_PLASTIC = new THREE.MeshStandardMaterial({ color: 0xf1f3f5, roughness: 0.45, metalness: 0 });
+const SENSOR_BODY = new THREE.BoxGeometry(0.08, 0.12, 0.035);
+const SENSOR_LED = new THREE.SphereGeometry(0.007, 12, 8);
+
+// Small white wall-mount sensor; only its status LED carries colour.
 function sensorMesh(point) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(0.12, 0.12, 0.12),
-    new THREE.MeshStandardMaterial({ color: 0x222831, emissive: 0x34d17a, emissiveIntensity: 1.2 }),
-  );
-  mesh.position.set(point.x, point.y, point.z);
-  return mesh;
+  const body = new THREE.Mesh(SENSOR_BODY, WHITE_PLASTIC);
+  body.castShadow = true;
+  const led = new THREE.Mesh(SENSOR_LED, new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x34d17a, emissiveIntensity: 2 }));
+  led.position.set(0.025, 0.045, 0.018);
+  body.add(led);
+  body.userData.led = led;
+  body.position.set(point.x, point.y, point.z);
+  return body;
 }
 
 function cameraMesh(point) {
   const group = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: 0xf2f4f7, roughness: 0.4 });
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.22, 16), white);
+  const white = WHITE_PLASTIC;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.22, 20), white);
   body.rotation.z = Math.PI / 2;
+  body.castShadow = true;
   const lens = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16),
-    new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x2244ff, emissiveIntensity: 0.6 }),
+    new THREE.CylinderGeometry(0.05, 0.05, 0.03, 20),
+    new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.1, metalness: 0.8 }),
   );
   lens.rotation.z = Math.PI / 2;
   lens.position.x = 0.12;
@@ -57,12 +65,12 @@ export function buildPoints(points) {
     }
   }
 
-  // Apply a live reading { temp, humidity } to a sensor's colour.
+  // Apply a live reading { temp, humidity } to a sensor's status LED.
   function updateSensor(id, reading) {
     const mesh = sensorMeshes.get(id);
     if (!mesh) return;
     mesh.userData.pick.live = reading;
-    mesh.material.emissive.setHex(tempLevel(reading.temp).color);
+    mesh.userData.led.material.emissive.setHex(tempLevel(reading.temp).color);
   }
 
   return { layers: { sensors, cameras }, updateSensor };

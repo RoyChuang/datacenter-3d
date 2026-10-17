@@ -1,12 +1,13 @@
 // site.yaml (tiles + mm, human-maintained) -> runtime JSON (metres) + validation report.
 // Pure: no file system access, so it can be unit-tested or reused elsewhere.
 
+// Colours follow common vendor finishes: matte black racks, light-grey power and cooling cabinets.
 export const DEFAULT_TYPES = {
-  rack: { width: 600, depth: 1200, uHeight: 42, uSize: 44.45, plinth: 65, color: '#2b2f36' },
-  rowcool: { width: 300, depth: 1200, height: 2000, color: '#38b6e8' },
-  pdc: { width: 600, depth: 1200, height: 2000, color: '#3d5bd9' },
-  ups: { width: 600, depth: 1000, height: 1900, color: '#3d5bd9' },
-  battery: { width: 600, depth: 1000, height: 1900, color: '#3d5bd9' },
+  rack: { width: 600, depth: 1200, uHeight: 42, uSize: 44.45, plinth: 65, color: '#1d2025' },
+  rowcool: { width: 300, depth: 1200, height: 2000, color: '#d6dade' },
+  pdc: { width: 600, depth: 1200, height: 2000, color: '#cfd4da' },
+  ups: { width: 600, depth: 1000, height: 1900, color: '#d6dade' },
+  battery: { width: 600, depth: 1000, height: 1900, color: '#cfd4da' },
 };
 
 export const DEFAULT_TYPE_RULES = [

@@ -65,6 +65,10 @@ siteRoot.add(equipment);
 const pointSet = buildPoints(data.points);
 siteRoot.add(pointSet.layers.sensors, pointSet.layers.cameras);
 
+// Everything is static, so the shadow map only needs to be drawn once.
+const span = Math.max(room.width, room.depth);
+stage.refreshShadows(span / 2);
+
 const layers = { ...roomLayers, ...pointSet.layers };
 const planUrl = site.plan && planImages[`../sites/${siteId}/${site.plan.image}`];
 if (planUrl) {
@@ -102,11 +106,13 @@ document.querySelectorAll('[data-layer]').forEach((input) => {
   const layer = layers[input.dataset.layer];
   if (!layer) { input.closest('label').classList.add('hidden'); return; }
   layer.visible = input.checked;
-  input.addEventListener('change', () => { layer.visible = input.checked; });
+  input.addEventListener('change', () => {
+    layer.visible = input.checked;
+    stage.refreshShadows(); // hidden walls must not leave their shadows behind
+  });
 });
 
 // Distance scales with the room so any site size fits the view.
-const span = Math.max(room.width, room.depth);
 const VIEWS = {
   persp: new THREE.Vector3(0, span * 0.75, span * 0.75),
   top: new THREE.Vector3(0, span * 1.2, 0.01),

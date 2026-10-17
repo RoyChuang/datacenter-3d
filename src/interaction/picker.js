@@ -18,8 +18,8 @@ function pickRoot(object) {
 export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect }) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-  const hoverBox = new THREE.BoxHelper(undefined, 0x7fd3ff);
-  const selectBox = new THREE.BoxHelper(undefined, 0xffd166);
+  const hoverBox = new THREE.BoxHelper(undefined, 0x3b82f6);
+  const selectBox = new THREE.BoxHelper(undefined, 0xf59e0b);
   hoverBox.visible = selectBox.visible = false;
   scene.add(hoverBox, selectBox);
 

@@ -1,17 +1,26 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+export const BACKGROUND = 0xeef1f4;
 
 // Renderer, camera, controls, lights and the render loop.
 export function createStage(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Nothing in the room moves, so the shadow map is rendered once (see refreshShadows) instead of every frame.
+  renderer.shadowMap.autoUpdate = false;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b1424);
+  scene.background = new THREE.Color(BACKGROUND);
+  // Soft studio reflections for painted metal; computed once.
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.35;
 
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 200);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -20,13 +29,24 @@ export function createStage(container) {
   controls.minDistance = 2;
   controls.maxDistance = 60;
 
-  scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x1a2233, 1.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  sun.position.set(8, 20, 10);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xa9afb8, 0.8));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+  sun.position.set(10, 18, 8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 15, bottom: -15, near: 1, far: 50 });
+  sun.shadow.radius = 4;
+  sun.shadow.bias = -0.0005;
   scene.add(sun);
+
+  // Fit the shadow camera to the site (half-extent in metres) and re-render the shadow map.
+  function refreshShadows(halfExtent) {
+    if (halfExtent) {
+      const s = halfExtent + 2;
+      Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 60 });
+      sun.shadow.camera.updateProjectionMatrix();
+    }
+    renderer.shadowMap.needsUpdate = true;
+  }
 
   // Smooth camera moves: ease for a fixed number of frames, then snap.
   // Damping fights the lerp near the end, so a distance threshold alone may never be reached.
@@ -57,5 +77,5 @@ export function createStage(container) {
     renderer.setSize(container.clientWidth, container.clientHeight);
   });
 
-  return { renderer, scene, camera, controls, flyTo, onTick: (fn) => tickers.push(fn) };
+  return { renderer, scene, camera, controls, flyTo, refreshShadows, onTick: (fn) => tickers.push(fn) };
 }
