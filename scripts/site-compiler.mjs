@@ -106,7 +106,7 @@ export function compileSite(site, { devices: realDevices } = {}) {
     const toRect = (along1, along2) => (a.axis === 'z'
       ? { x1: c1, z1: r3(along1), x2: c2, z2: r3(along2) }
       : { x1: r3(along1), z1: c1, x2: r3(along2), z2: c2 });
-    containments.push({ id: aisle.id, ...toRect(s, e) });
+    containments.push({ id: aisle.id, rows: aisle.between, ...toRect(s, e) });
     for (const end of aisle.doors ?? []) {
       const r = end === 'start' ? toRect(s - AISLE_DOOR_THICKNESS, s) : toRect(e, e + AISLE_DOOR_THICKNESS);
       doors.push({ id: `${aisle.id}-${end === 'start' ? 'S' : 'E'}`, kind: 'sliding', ...r });

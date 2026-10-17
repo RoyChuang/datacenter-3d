@@ -21,6 +21,7 @@
       <label><input type="checkbox" data-layer="cameras" checked /> 攝影機</label>
       <label><input type="checkbox" data-layer="power" /> 電力拓樸</label>
       <label><input type="checkbox" data-layer="heat" /> 溫度熱圖</label>
+      <label><input type="checkbox" data-layer="airflow" /> 氣流</label>
       <label><input type="checkbox" data-layer="plan" /> 平面圖疊圖（比對用）</label>
     </div>
 
@@ -39,6 +40,12 @@
       <div class="heat-bar"></div>
       <div class="heat-ticks"><span>15</span><span>20</span><span>25</span><span>30</span><span>35 °C</span></div>
       <div class="legend-note">感測器之間為內插估算，未考慮牆的阻隔；離感測器太遠處不顯示</div>
+    </div>
+    <div id="airflow-legend" class="hud hidden">
+      <div class="legend-title">氣流（冷通道封閉）</div>
+      <div class="heat-bar" style="background: linear-gradient(to right, #2563eb, #dc2626)"></div>
+      <div class="heat-ticks"><span>冷風</span><span>熱風</span></div>
+      <div class="legend-note">示意：列間空調把冷風送進封閉的冷通道，機櫃吸入後由背面排出，再回到空調後方。點選機櫃或空調可只看它的氣流。</div>
     </div>
     <div id="tooltip" class="hidden"></div>
 

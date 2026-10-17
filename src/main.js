@@ -10,6 +10,7 @@ import { buildPanel } from './builders/panel.js';
 import { buildPowerLayer } from './power/topology.js';
 import { setFade, setGhost, setSupplied } from './power/appearance.js';
 import { buildHeatmap, SCALE, SCALE_MIN, SCALE_MAX } from './thermal/heatmap.js';
+import { buildAirflow } from './thermal/airflow.js';
 import { buildPoints } from './builders/points.js';
 import { buildPlanOverlay } from './builders/planOverlay.js';
 import { setupPicker } from './interaction/picker.js';
@@ -90,6 +91,20 @@ const powerLayer = data.power && buildPowerLayer(data.power, {
   labelOf: (id) => units.get(id)?.item.alias ?? id,
   itemOf: (id) => units.get(id)?.item,
 });
+// Run `step` while `object` is visible, at ~30 fps: smooth enough for moving dashes and arrows,
+// and it keeps frames coming only while such a layer is shown.
+function animateWhileVisible(object, step) {
+  let elapsed = 0;
+  stage.onTick((dt) => {
+    if (!object.visible) return false;
+    elapsed += dt;
+    if (elapsed < 1 / 30) return false;
+    step(elapsed);
+    elapsed = 0;
+    return true;
+  });
+}
+
 let supplied = [];
 // Layers that only add clutter in power view; hidden while it is on, then back to their checkbox state.
 const HIDE_IN_POWER_VIEW = ['sensors', 'cameras', 'containment'];
@@ -125,17 +140,7 @@ function applyPowerSelection() {
 if (powerLayer) {
   siteRoot.add(powerLayer.group);
   layers.power = powerLayer.group;
-  // The flow animation keeps frames coming only while the power layer is shown,
-  // and only at ~30 fps — smooth enough for moving dashes, half the work on a 60 Hz screen.
-  let flowTime = 0;
-  stage.onTick((dt) => {
-    if (!powerLayer.group.visible) return false;
-    flowTime += dt;
-    if (flowTime < 1 / 30) return false;
-    powerLayer.tick(flowTime);
-    flowTime = 0;
-    return true;
-  });
+  animateWhileVisible(powerLayer.group, (dt) => powerLayer.tick(dt));
 }
 // ---------- temperature heatmap ----------
 // A horizontal slice at the sensors' mounting height, estimated from their live readings.
@@ -158,6 +163,31 @@ function showHeat(on) {
 const gradient = SCALE.map(([t, c]) => `${c} ${((t - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100}%`).join(', ');
 document.querySelector('#heat-legend .heat-bar').style.background = `linear-gradient(to right, ${gradient})`;
 document.querySelector('#heat-legend .legend-title').textContent = `溫度（離地 ${heatHeight} m）`;
+
+// ---------- airflow ----------
+const airflow = buildAirflow({
+  containments: room.containments,
+  racks: data.racks,
+  coolers: data.rowcools,
+  depth: { rack: types.rack.depth, rowcool: types.rowcool.depth },
+});
+siteRoot.add(airflow.group);
+layers.airflow = airflow.group;
+const airflowOn = () => airflow.group.visible;
+const isCooler = (id) => data.rowcools.some((c) => c.id === id);
+function showAirflow(on) {
+  // racks fade so the arrows show through them; the coolers driving the flow stay solid
+  for (const [id, u] of units) setGhost(u.group, on && !isCooler(id));
+  layers.cameras.visible = !on && document.querySelector('[data-layer="cameras"]').checked;
+  setFade(roomLayers.walls, on ? 0.35 : 1);
+  document.getElementById('airflow-legend').classList.toggle('hidden', !on);
+  applyAirflowSelection();
+}
+// Selecting a rack or cooler narrows the arrows to the loops it takes part in.
+function applyAirflowSelection() {
+  airflow.setFocus(airflowOn() ? picker?.selected?.userData.pick.data.id ?? null : null);
+}
+animateWhileVisible(airflow.group, (dt) => airflow.tick(dt));
 
 const planUrl = site.plan && planImages[`../sites/${siteId}/${site.plan.image}`];
 if (planUrl) {
@@ -182,7 +212,8 @@ function unitOf(object) {
   return o.parent === equipment ? o : null;
 }
 function clearCutaway() {
-  for (const g of cutaway) setGhost(g, heatOn()); // back to whatever the heat view wants
+  // back to whatever the active analysis view wants
+  for (const g of cutaway) setGhost(g, heatOn() || (airflowOn() && !isCooler(g.name)));
   cutaway = [];
 }
 // Boxes the camera must not end up inside (equipment and solid walls), computed once.
@@ -230,6 +261,7 @@ const picker = setupPicker({
     clearCutaway();
     panel.show(object?.userData.pick ?? null);
     applyPowerSelection(); // after the cutaway is cleared, so power-view ghosting is re-applied on top
+    applyAirflowSelection();
   },
   // Selecting leaves the camera alone; only a double-click flies in.
   onFocus(object) {
@@ -261,7 +293,7 @@ startMockLive(data.points, (id, reading) => {
 
 // ---------- toolbar ----------
 // Analysis views each take over the scene, so only one can be on at a time.
-const ANALYSIS = { power: (on) => showPower(on), heat: (on) => showHeat(on) };
+const ANALYSIS = { power: (on) => showPower(on), heat: (on) => showHeat(on), airflow: (on) => showAirflow(on) };
 document.querySelectorAll('[data-layer]').forEach((input) => {
   const name = input.dataset.layer;
   const layer = layers[name];

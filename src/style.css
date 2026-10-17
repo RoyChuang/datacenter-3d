@@ -76,3 +76,4 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .legend-title { font-weight: 600; margin-bottom: 6px; }
 .heat-bar { height: 10px; border-radius: 3px; }
 .heat-ticks { display: flex; justify-content: space-between; color: var(--muted); margin-top: 3px; }
+#airflow-legend { left: 12px; bottom: 12px; font-size: 12px; width: min(280px, calc(100vw - 24px)); }
