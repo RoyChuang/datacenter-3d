@@ -14,8 +14,8 @@ function pickRoot(object) {
   return o;
 }
 
-// Hover outline + tooltip, click to select. Drags (orbiting) don't count as clicks.
-export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect }) {
+// Hover outline + tooltip, click to select, double-click to focus. Drags (orbiting) don't count as clicks.
+export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect, onFocus }) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const hoverBox = new THREE.BoxHelper(undefined, 0x3b82f6);
@@ -57,6 +57,10 @@ export function setupPicker({ camera, scene, dom, targets, tooltip, onSelect }) 
   dom.addEventListener('pointerup', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) return;
     select(hitTest(e));
+  });
+  dom.addEventListener('dblclick', (e) => {
+    const object = hitTest(e);
+    if (object) onFocus?.(object);
   });
 
   function select(object) {

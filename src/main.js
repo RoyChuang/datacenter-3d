@@ -140,7 +140,9 @@ const picker = setupPicker({
   onSelect(object) {
     panel.show(object?.userData.pick ?? null);
     applyPowerSelection();
-    if (!object) return;
+  },
+  // Selecting leaves the camera alone; only a double-click flies in.
+  onFocus(object) {
     // Fly to the object, keeping the current viewing direction but no farther than 9m.
     const target = new THREE.Box3().setFromObject(object).getCenter(new THREE.Vector3());
     const offset = camera.position.clone().sub(controls.target);

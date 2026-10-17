@@ -72,7 +72,7 @@ export function createPanel(el, { onClose, extra }) {
     el.classList.toggle('hidden', !pick);
     if (!pick) return;
     el.innerHTML = `<button class="close" title="關閉">×</button>` +
-      `<h2>${pick.data.id}</h2><div class="kind">${KIND_LABEL[pick.kind] ?? pick.kind}</div>${extra?.(pick) ?? ''}${body(pick)}`;
+      `<h2>${pick.data.id}</h2><div class="kind">${KIND_LABEL[pick.kind] ?? pick.kind} · <span class="muted">雙擊可聚焦</span></div>${extra?.(pick) ?? ''}${body(pick)}`;
     el.querySelector('.close').onclick = onClose;
   }
   // Re-render only if the given pick is what is on screen (used for live updates).
