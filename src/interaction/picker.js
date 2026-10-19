@@ -65,6 +65,26 @@ export function setupPicker({ camera, controls, scene, dom, targets, tooltip, on
 
   let hovered = null;
   let selected = null;
+  let interacting = false;
+  let hoverFrame = null;
+  let pendingPointer = null;
+
+  function clearHover() {
+    if (hoverFrame !== null) cancelAnimationFrame(hoverFrame);
+    hoverFrame = null;
+    pendingPointer = null;
+    if (hoverBox.visible) requestRender();
+    hovered = null;
+    hoverBox.visible = false;
+    dom.style.cursor = '';
+    tooltip.classList.add('hidden');
+  }
+  controls.addEventListener('start', () => {
+    interacting = true;
+    clearHover();
+  });
+  controls.addEventListener('end', () => { interacting = false; });
+  dom.addEventListener('pointerleave', clearHover);
 
   function hitTest(event) {
     const rect = dom.getBoundingClientRect();
@@ -79,12 +99,15 @@ export function setupPicker({ camera, controls, scene, dom, targets, tooltip, on
     return null;
   }
 
-  dom.addEventListener('pointermove', (event) => {
+  function updateHover(event) {
+    const previous = hovered;
     hovered = hitTest(event);
     hoverBox.visible = !!hovered && hovered !== selected;
-    if (hoverBox.visible) hoverBox.setFromObject(hovered);
+    if (previous !== hovered) {
+      if (hoverBox.visible) hoverBox.setFromObject(hovered);
+      requestRender();
+    }
     dom.style.cursor = hovered ? 'pointer' : '';
-    requestRender();
     tooltip.classList.toggle('hidden', !hovered);
     if (hovered) {
       const { data, live } = hovered.userData.pick;
@@ -92,12 +115,29 @@ export function setupPicker({ camera, controls, scene, dom, targets, tooltip, on
       tooltip.style.left = `${event.clientX}px`;
       tooltip.style.top = `${event.clientY}px`;
     }
+  }
+
+  // Trackpads can deliver several pointer events per frame. Only the latest position matters,
+  // and orbiting/panning needs no hover raycast at all.
+  dom.addEventListener('pointermove', (event) => {
+    if (interacting || event.buttons) return;
+    pendingPointer = { clientX: event.clientX, clientY: event.clientY };
+    if (hoverFrame !== null) return;
+    hoverFrame = requestAnimationFrame(() => {
+      hoverFrame = null;
+      const pointer = pendingPointer;
+      pendingPointer = null;
+      if (pointer && !interacting) updateHover(pointer);
+    });
   });
 
   let downAt = null;
   dom.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY }; });
+  dom.addEventListener('pointercancel', () => { downAt = null; clearHover(); });
   dom.addEventListener('pointerup', (e) => {
-    if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 4) return;
+    const start = downAt;
+    downAt = null;
+    if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4) return;
     const hit = hitTest(e);
     select(hit && hit === selected ? null : hit); // clicking the selection again deselects it
   });
@@ -108,6 +148,7 @@ export function setupPicker({ camera, controls, scene, dom, targets, tooltip, on
   });
 
   function select(object) {
+    clearHover();
     selected = object;
     selectBox.visible = !!object;
     // exactly the model's bounds: the outline is drawn on top, so it needs no margin against z-fighting

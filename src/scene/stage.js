@@ -26,6 +26,7 @@ export function createStage(container) {
   const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 200);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+  controls.dampingFactor = 0.15;
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
   controls.minDistance = 2;
   controls.maxDistance = 60;
