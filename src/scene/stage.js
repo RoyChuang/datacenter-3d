@@ -48,6 +48,7 @@ export function createStage(container) {
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
   controls.minDistance = 2;
   controls.maxDistance = 60;
+  const MIN_EYE = 0.3; // lowest camera height above the floor (m)
 
   function setQuality(moving) {
     renderer.setPixelRatio(moving ? movingRatio() : idleRatio());
@@ -103,6 +104,10 @@ export function createStage(container) {
       dirty = true;
     }
     controls.update(); // dispatches 'change' while damping is still moving the camera
+    // maxPolarAngle only limits the angle around the target; panning and zoom-to-cursor can still
+    // drag the target, and the camera with it, under the floor, where the single-sided floor is invisible.
+    if (controls.target.y < 0) { controls.target.y = 0; dirty = true; }
+    if (camera.position.y < MIN_EYE) { camera.position.y = MIN_EYE; dirty = true; }
     for (const fn of tickers) if (fn(dt)) dirty = true;
     const now = performance.now();
     if (cameraMoved) {
