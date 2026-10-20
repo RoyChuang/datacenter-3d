@@ -12,7 +12,7 @@ const HEIGHTS = [0.7, 1.5]; // one loop per height, so the flow covers the cabin
 // fading in and out over a short life and reappearing a little further on after a brief gap, so the
 // field shimmers instead of marching in lockstep. Many short streaks read as noise and few as nothing,
 // so they are moderate in number, longer, brighter and kept close to their loop.
-const PER_LOOP = 12; // streaks travelling each loop
+const PER_LOOP = 14; // streaks travelling each loop
 const TRAIL_POINTS = 9; // samples per streak, head first
 const TRAIL_STEP = 0.04; // m between samples, so a streak is ~0.3 m long
 const BAND = 0.14; // m — how far a streak may sit off its loop (grows as the air spreads)
