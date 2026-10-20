@@ -8,19 +8,14 @@ import * as THREE from 'three';
 const COLD = new THREE.Color('#2563eb');
 const HOT = new THREE.Color('#dc2626');
 const HEIGHTS = [0.7, 1.5]; // one loop per height, so the flow covers the cabinet face
-// Drawn like a wind map (windy.com): a soft coloured wash on the floor shows where the cold and hot air
-// is at a glance, and sparse thin streaks over it show which way it moves. Each streak is a line whose
-// tail fades out; it fades in and out over a short life and reappears a little further on after a brief
-// gap, so the field shimmers instead of marching in lockstep. Many streaks alone read as noise, so the
-// wash carries the picture and the streaks stay few.
-const PER_LOOP = 8; // streaks travelling each loop
-const TRAIL_POINTS = 12; // samples per streak, head first
-const TRAIL_STEP = 0.045; // m between samples, so a streak is ~0.5 m long
+// Drawn like a wind map (windy.com): many thin streaks, each a short line whose tail fades out,
+// fading in and out over a short life and reappearing a little further on after a brief gap, so the
+// field shimmers instead of marching in lockstep. Many short streaks read as noise and few as nothing,
+// so they are moderate in number, longer, brighter and kept close to their loop.
+const PER_LOOP = 12; // streaks travelling each loop
+const TRAIL_POINTS = 9; // samples per streak, head first
+const TRAIL_STEP = 0.04; // m between samples, so a streak is ~0.3 m long
 const BAND = 0.14; // m — how far a streak may sit off its loop (grows as the air spreads)
-const WASH_RES = 24; // floor wash pixels per metre
-const WASH_WIDTH = 0.6; // m, width of the band painted along each open-air leg
-const WASH_BLUR = 0.2; // m
-const WASH_ALPHA = { cold: 0.2, hot: 0.16 };
 const SPREAD = 0.5; // mid-leg the band is this much wider; it narrows again into the next intake
 const SWEEP = 0.8; // m before / after a rack where its air turns off / onto a lane
 const HOT_LANE = 0.6; // m behind the rack backs where the farthest rack's exhaust runs to the cooler
@@ -33,7 +28,7 @@ const JITTER = 0.06; // m a streak may shift sideways between lives
 // Screen-space width in CSS pixels, head to tail. GL lines are always 1 px, too thin to read on the
 // light floor, so each streak is a camera-facing ribbon that tapers to its tail.
 const WIDTH = [2.6, 0.8]; // the edges are feathered, so it reads thinner than this
-const OPACITY = 0.75; // at the head
+const OPACITY = 0.8; // at the head
 // Opacity along a streak (t: 0 head .. 1 tail): like windy.com, the head is the densest point and the
 // tail thins out behind it.
 const profile = (t) => (1 - t) ** 1.5;
@@ -76,67 +71,6 @@ function smoothLoop(points) {
   const lengths = [0];
   for (let i = 1; i < path.length; i++) lengths.push(lengths[i - 1] + path[i].distanceTo(path[i - 1]));
   return { path, heat, lengths, marks, total: lengths[lengths.length - 1] };
-}
-
-// The floor wash: each loop's two open-air legs (cooler -> rack front, rack rear -> cooler rear)
-// painted as soft bands on the floor, blue and red. Each colour is painted opaque on its own canvas
-// first and laid down once at a fixed alpha, so where many loops overlap the tint stays even instead
-// of building up. draw(keep) repaints with only the loops `keep` accepts (for focusing on one cabinet).
-function buildWash(loops) {
-  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
-  for (const l of loops) for (const p of l.path) {
-    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
-  }
-  if (!loops.length) minX = minZ = maxX = maxZ = 0;
-  const margin = WASH_WIDTH + WASH_BLUR * 3;
-  minX -= margin; minZ -= margin; maxX += margin; maxZ += margin;
-  const canvas = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
-  const W = Math.ceil((maxX - minX) * WASH_RES);
-  const H = Math.ceil((maxZ - minZ) * WASH_RES);
-  const out = canvas(W, H);
-  const layer = canvas(W, H);
-  const texture = new THREE.CanvasTexture(out);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(maxX - minX, maxZ - minZ),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }),
-  );
-  mesh.rotation.x = -Math.PI / 2; // canvas top row ends up at minZ
-  mesh.position.set((minX + maxX) / 2, 0.012, (minZ + maxZ) / 2); // just above the floor tiles
-  mesh.renderOrder = -1; // under the streaks
-
-  function draw(keep = () => true) {
-    const ctx = out.getContext('2d');
-    ctx.clearRect(0, 0, W, H);
-    for (const [leg, color, alpha] of [[1, HOT, WASH_ALPHA.hot], [0, COLD, WASH_ALPHA.cold]]) {
-      const lc = layer.getContext('2d');
-      lc.clearRect(0, 0, W, H);
-      lc.strokeStyle = `#${color.getHexString()}`;
-      lc.lineWidth = WASH_WIDTH * WASH_RES;
-      lc.lineCap = lc.lineJoin = 'round';
-      // one height is enough: the floor sees the loops from above
-      for (const l of loops) {
-        if (l.height !== HEIGHTS[0] || !keep(l)) continue;
-        const [from, to] = leg === 0 ? [l.marks[0], l.marks[3]] : [l.marks[4], l.marks[7]];
-        lc.beginPath();
-        for (let i = from; i <= to; i++) {
-          const x = (l.path[i].x - minX) * WASH_RES;
-          const y = (l.path[i].z - minZ) * WASH_RES;
-          if (i === from) lc.moveTo(x, y); else lc.lineTo(x, y);
-        }
-        lc.stroke();
-      }
-      ctx.globalAlpha = alpha;
-      ctx.filter = `blur(${WASH_BLUR * WASH_RES}px)`;
-      ctx.drawImage(layer, 0, 0);
-    }
-    ctx.globalAlpha = 1;
-    ctx.filter = 'none';
-    texture.needsUpdate = true;
-  }
-  draw();
-  return { mesh, draw };
 }
 
 /**
@@ -208,7 +142,7 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
         // the two open-air legs (cooler -> rack front, rack rear -> cooler rear) along which the air spreads
         const at = (i) => loop.lengths[loop.marks[i]];
         loop.legs = [[at(0), at(3)], [at(4), at(7)]];
-        loops.push({ rack: rack.id, cooler: cooler.id, height: h, ...loop });
+        loops.push({ rack: rack.id, cooler: cooler.id, ...loop });
       }
     }
   }
@@ -313,8 +247,7 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
   const group = new THREE.Group();
   group.name = 'airflow';
   group.visible = false;
-  const wash = buildWash(loops);
-  group.add(wash.mesh, lines);
+  group.add(lines);
 
   const pos = new THREE.Vector3();
   const color = new THREE.Color();
@@ -390,7 +323,6 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
     // Focus on a rack or cooler (null = everything); returns false if the id has no airflow.
     setFocus(id) {
       focus = id && loops.some((l) => l.rack === id || l.cooler === id) ? id : null;
-      wash.draw((l) => !focus || l.rack === focus || l.cooler === focus);
       tick(0);
       return focus !== null;
     },
