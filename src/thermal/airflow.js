@@ -11,7 +11,7 @@ const HEIGHTS = [0.7, 1.5]; // one loop per height, so the flow covers the cabin
 // Drawn like a wind map (windy.com): many thin streaks, each a short line whose tail fades out,
 // fading in and out over a short life and reappearing a little further on after a brief gap, so the
 // field shimmers instead of marching in lockstep.
-const PER_LOOP = 13; // streaks travelling each loop
+const PER_LOOP = 20; // streaks travelling each loop
 const TRAIL_POINTS = 9; // samples per streak, head first
 const TRAIL_STEP = 0.04; // m between samples, so a streak is ~0.3 m long
 const BAND = 0.2; // m — how far a streak may sit off its loop (grows as the air spreads)
