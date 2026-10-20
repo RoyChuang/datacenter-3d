@@ -32,6 +32,16 @@ const OPACITY = 0.8; // at the head
 // Opacity along a streak (t: 0 head .. 1 tail): like windy.com, the head is the densest point and the
 // tail thins out behind it.
 const profile = (t) => (1 - t) ** 1.5;
+// Mist: a few large, soft, slow puffs riding the same loops under the streaks, so the flow reads as a
+// volume of air rather than lines alone. They swell where the air spreads mid-leg and shrink back into
+// the next intake; colour follows the same cold -> hot mix as the streaks.
+const FOG_PER_LOOP = 10; // puffs drifting along each loop
+const FOG_SPEED = 0.45; // relative to SPEED: mist lags behind the streaks
+const FOG_SIZE = [0.5, 1.1]; // m across: at an intake .. fully spread mid-leg
+const FOG_LIFE = [1.6, 3.2]; // s visible, random per life
+const FOG_FADE = 0.6; // s of fade-in / fade-out
+const FOG_OPACITY = 0.1; // at the puff's centre, before the life fade
+const FOG_BAND = 1.6; // × BAND: puffs wander further off the loop than the streaks
 
 const FACING_DIR = {
   north: new THREE.Vector3(0, 0, -1), south: new THREE.Vector3(0, 0, 1),
@@ -249,6 +259,68 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
   group.visible = false;
   group.add(lines);
 
+  // ---------- mist ----------
+  const fogCount = loops.length * FOG_PER_LOOP;
+  const fogPositions = new Float32Array(fogCount * 3);
+  const fogColors = new Float32Array(fogCount * 4);
+  const fogSizes = new Float32Array(fogCount);
+  const fogGeometry = new THREE.BufferGeometry();
+  const fogAttr = (name, array, itemSize) =>
+    fogGeometry.setAttribute(name, new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage));
+  fogAttr('position', fogPositions, 3);
+  fogAttr('rgba', fogColors, 4);
+  fogAttr('size', fogSizes, 1);
+  const fogMaterial = new THREE.ShaderMaterial({
+    uniforms: { viewHeight: { value: 1 } },
+    vertexShader: `
+      attribute vec4 rgba;
+      attribute float size;
+      uniform float viewHeight;
+      varying vec4 vColor;
+      void main() {
+        vColor = rgba;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        // world-space diameter -> pixels for a perspective camera
+        gl_PointSize = size * projectionMatrix[1][1] * viewHeight * 0.5 / max(-mv.z, 0.01);
+      }`,
+    fragmentShader: `
+      varying vec4 vColor;
+      void main() {
+        vec2 c = gl_PointCoord * 2.0 - 1.0;
+        float a = vColor.a * exp(-3.5 * dot(c, c)); // soft gaussian puff, no hard edge
+        if (a < 0.003) discard;
+        gl_FragColor = vec4(vColor.rgb, a);
+        #include <colorspace_fragment>
+      }`,
+    transparent: true,
+    depthWrite: false,
+  });
+  const fog = new THREE.Points(fogGeometry, fogMaterial);
+  fog.frustumCulled = false;
+  fog.renderOrder = -1; // under the streaks
+  fog.onBeforeRender = (renderer) => {
+    fogMaterial.uniforms.viewHeight.value = renderer.getDrawingBufferSize(size).y;
+  };
+  group.add(fog);
+
+  const puffs = [];
+  loops.forEach((loop, li) => {
+    for (let k = 0; k < FOG_PER_LOOP; k++) {
+      const q = { loop, i: li * FOG_PER_LOOP + k, offset: new THREE.Vector3(), s: Math.random() * loop.total, age: 0, life: 1 };
+      q.speed = SPEED * FOG_SPEED * rand(0.8, 1.2);
+      rebornPuff(q);
+      q.age = Math.random() * q.life;
+      puffs.push(q);
+    }
+  });
+  function rebornPuff(q) {
+    const b = BAND * FOG_BAND;
+    q.age = 0;
+    q.life = rand(FOG_LIFE[0], FOG_LIFE[1]);
+    q.offset.set(rand(-0.5, 0.5) * b, rand(-0.5, 0.5) * b, rand(-0.5, 0.5) * b);
+  }
+
   const pos = new THREE.Vector3();
   const color = new THREE.Color();
   let focus = null; // show only loops involving this rack / cooler
@@ -264,7 +336,11 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
   // Trail sample `j` of streak `p`, at distance `s` along its loop, into `trail[j]`; returns its colour mix (0 cold .. 1 hot).
   const trail = Array.from({ length: TRAIL_POINTS }, () => new THREE.Vector3());
   function sample(p, j, s) {
-    const { loop } = p;
+    return pointAt(p.loop, p.offset, s, trail[j]);
+  }
+  // Point at distance `s` along `loop`, pushed off it by `offset` (scaled by how spread the air is),
+  // into `out`; returns its colour mix (0 cold .. 1 hot).
+  function pointAt(loop, offset, s, out) {
     const { lengths } = loop;
     let lo = 1; // first polyline point at or past s
     let hi = lengths.length - 1;
@@ -274,7 +350,7 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
       else hi = mid;
     }
     const k = (s - lengths[lo - 1]) / (lengths[lo] - lengths[lo - 1] || 1);
-    trail[j].lerpVectors(loop.path[lo - 1], loop.path[lo], k).addScaledVector(p.offset, 0.5 + SPREAD * spreadAt(loop, s));
+    out.lerpVectors(loop.path[lo - 1], loop.path[lo], k).addScaledVector(offset, 0.5 + SPREAD * spreadAt(loop, s));
     return loop.heat[lo - 1] + (loop.heat[lo] - loop.heat[lo - 1]) * k;
   }
 
@@ -314,6 +390,27 @@ export function buildAirflow({ containments, racks, coolers, depth }) {
       place(p);
     }
     for (const name of ['position', 'toward', 'rgba']) geometry.attributes[name].needsUpdate = true;
+    for (const q of puffs) {
+      q.age += dt;
+      if (q.age >= q.life) rebornPuff(q);
+      q.s = (q.s + q.speed * dt) % q.loop.total;
+      placePuff(q);
+    }
+    for (const name of ['position', 'rgba', 'size']) fogGeometry.attributes[name].needsUpdate = true;
+  }
+
+  function placePuff(q) {
+    const { loop } = q;
+    const hide = focus && loop.rack !== focus && loop.cooler !== focus;
+    const life = hide ? 0 : Math.max(0, Math.min(1, q.age / FOG_FADE, (q.life - q.age) / FOG_FADE));
+    const heat = pointAt(loop, q.offset, q.s, pos);
+    pos.toArray(fogPositions, q.i * 3);
+    color.lerpColors(COLD, HOT, heat);
+    fogColors[q.i * 4] = color.r;
+    fogColors[q.i * 4 + 1] = color.g;
+    fogColors[q.i * 4 + 2] = color.b;
+    fogColors[q.i * 4 + 3] = life * FOG_OPACITY;
+    fogSizes[q.i] = FOG_SIZE[0] + (FOG_SIZE[1] - FOG_SIZE[0]) * spreadAt(loop, q.s);
   }
   tick(0);
 
