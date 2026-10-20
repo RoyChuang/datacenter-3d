@@ -21,9 +21,9 @@ const SWEEP = 0.8; // m before / after a rack where its air turns off / onto a l
 const HOT_LANE = 0.6; // m behind the rack backs where the farthest rack's exhaust runs to the cooler
 const MIN_TURN = 0.3; // m — smallest radius of the U-turn between a cooler and the rack next to it
 const SPEED = 0.8; // m/s along the loop, each streak ±25%
-const LIFE = [0.8, 1.6]; // s visible, random per life
-const GAP = [0.15, 0.45]; // s unseen between lives
-const FADE = 0.3; // s of fade-in at birth and fade-out at the end of a life
+const LIFE = [0.4, 0.8]; // s visible, random per life
+const GAP = [0.08, 0.25]; // s unseen between lives
+const FADE = 0.15; // s of fade-in at birth and fade-out at the end of a life
 const JITTER = 0.06; // m a streak may shift sideways between lives
 // Screen-space width in CSS pixels, head to tail. GL lines are always 1 px, too thin to read on the
 // light floor, so each streak is a camera-facing ribbon that tapers to its tail.
