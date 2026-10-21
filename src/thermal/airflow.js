@@ -12,7 +12,7 @@ const HEIGHTS = [0.7, 1.5]; // one loop per height, so the flow covers the cabin
 // fading in and out over a short life and reappearing a little further on after a brief gap, so the
 // field shimmers instead of marching in lockstep. Many short streaks read as noise and few as nothing,
 // so they are moderate in number, longer, brighter and kept close to their loop.
-const PER_LOOP = 14; // streaks travelling each loop
+const PER_LOOP = 24; // streaks travelling each loop
 const TRAIL_POINTS = 9; // samples per streak, head first
 const TRAIL_STEP = 0.04; // m between samples, so a streak is ~0.3 m long
 const BAND = 0.14; // m — how far a streak may sit off its loop (grows as the air spreads)
@@ -20,10 +20,10 @@ const SPREAD = 0.5; // mid-leg the band is this much wider; it narrows again int
 const SWEEP = 0.8; // m before / after a rack where its air turns off / onto a lane
 const HOT_LANE = 0.6; // m behind the rack backs where the farthest rack's exhaust runs to the cooler
 const MIN_TURN = 0.3; // m — smallest radius of the U-turn between a cooler and the rack next to it
-const SPEED = 0.8; // m/s along the loop, each streak ±25%
-const LIFE = [0.4, 0.8]; // s visible, random per life
-const GAP = [0.08, 0.25]; // s unseen between lives
-const FADE = 0.15; // s of fade-in at birth and fade-out at the end of a life
+const SPEED = 0.4; // m/s along the loop, each streak ±25%
+const LIFE = [1.2, 2.4]; // s visible, random per life
+const GAP = [0.05, 0.15]; // s unseen between lives
+const FADE = 0.35; // s of fade-in at birth and fade-out at the end of a life
 const JITTER = 0.06; // m a streak may shift sideways between lives
 // Screen-space width in CSS pixels, head to tail. GL lines are always 1 px, too thin to read on the
 // light floor, so each streak is a camera-facing ribbon that tapers to its tail.
@@ -38,7 +38,7 @@ const profile = (t) => (1 - t) ** 1.5;
 const FOG_PER_LOOP = 10; // puffs drifting along each loop
 const FOG_SPEED = 0.45; // relative to SPEED: mist lags behind the streaks
 const FOG_SIZE = [0.5, 1.1]; // m across: at an intake .. fully spread mid-leg
-const FOG_LIFE = [1.6, 3.2]; // s visible, random per life
+const FOG_LIFE = [3.2, 6.4]; // s visible, random per life
 const FOG_FADE = 0.6; // s of fade-in / fade-out
 const FOG_OPACITY = 0.1; // at the puff's centre, before the life fade
 const FOG_BAND = 1.6; // × BAND: puffs wander further off the loop than the streaks
