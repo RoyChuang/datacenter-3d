@@ -40,6 +40,7 @@ export function buildCapacity(racks, devicesOf, spec, mockRatedKW = null) {
     const height = inner * (rack.uHeight / spec.defaultUHeight);
     const material = new THREE.MeshStandardMaterial({ roughness: 0.6, transparent: true, opacity: 0.92 });
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(rack.width * 0.82, 1, spec.depth * 0.82), material);
+    mesh.name = rack.id;
     const holder = new THREE.Group();
     placeOnFloor(holder, rack);
     holder.add(mesh);

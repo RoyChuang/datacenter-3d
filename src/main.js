@@ -203,6 +203,8 @@ function applyAirflowSelection() {
 // ---------- capacity ----------
 // Racks fade to a shell and a column inside shows how full each one is, by U space or by power.
 const capacity = buildCapacity(data.racks, data['rack-devices'], types.rack, site.mockRatedKW);
+// clicking a column selects its rack
+capacity.group.traverse((o) => { if (o.isMesh) o.userData.pickAs = units.get(o.name).group.children[0]; });
 siteRoot.add(capacity.group);
 layers.capacity = capacity.group;
 const capacityOn = () => capacity.group.visible;
@@ -328,7 +330,9 @@ const picker = setupPicker({
   scene,
   dom: stage.renderer.domElement,
   // walls are included only so they can block picks behind them
-  targets: [equipment, pointSet.layers.sensors, pointSet.layers.cameras, roomLayers.walls],
+  targets: [equipment, capacity.group, pointSet.layers.sensors, pointSet.layers.cameras, roomLayers.walls],
+  // in the capacity view only racks matter; faded coolers and power cabinets let picks through
+  skip: (root) => capacityOn() && root.userData.pick.kind !== 'rack' && !!unitOf(root),
   tooltip: document.getElementById('tooltip'),
   requestRender: stage.requestRender,
   onSelect(object) {

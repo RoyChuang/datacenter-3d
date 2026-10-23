@@ -40,14 +40,17 @@ function visibleBoxEdges(box, eye) {
 }
 
 // Hover outline + tooltip, click to select, double-click to focus. Drags (orbiting) don't count as clicks.
-export function setupPicker({ camera, controls, scene, dom, targets, tooltip, onSelect, onFocus, requestRender }) {
+// `skip(root)` lets the view make some objects transparent to picks; meshes with `userData.pickAs` pick
+// that object instead of themselves.
+export function setupPicker({ camera, controls, scene, dom, targets, tooltip, onSelect, onFocus, requestRender, skip }) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const hoverBox = new THREE.BoxHelper(undefined, 0x3b82f6);
   hoverBox.visible = false;
   // Selection: a thick amber outline drawn on top of everything, so neighbours and walls never hide it.
-  // Only the object's own back edges are left out (recomputed as the camera moves).
-  const selectBox = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: 0xf59e0b, linewidth: 3.5, depthTest: false }));
+  // Only the object's own back edges are left out (recomputed as the camera moves). Marked transparent so it
+  // is drawn in the last pass, after see-through things such as ghosted cabinets and capacity columns.
+  const selectBox = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: 0xf59e0b, linewidth: 3.5, depthTest: false, transparent: true }));
   selectBox.renderOrder = 30;
   selectBox.visible = false;
   let selectedBox = null;
@@ -90,10 +93,16 @@ export function setupPicker({ camera, controls, scene, dom, targets, tooltip, on
     const rect = dom.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
-    for (const hit of raycaster.intersectObjects(targets, true)) {
-      if (!isShown(hit.object)) continue;
+    const hits = raycaster.intersectObjects(targets, true).filter((hit) => isShown(hit.object));
+    // A stand-in (e.g. a capacity column inside a faded rack) is what the user is looking at, so it wins
+    // over faded shells in front of it; walls still block it.
+    for (const hit of hits) {
+      if (hit.object.userData.occluder) break;
+      if (hit.object.userData.pickAs) return pickRoot(hit.object.userData.pickAs);
+    }
+    for (const hit of hits) {
       const root = pickRoot(hit.object);
-      if (root) return root;
+      if (root && !skip?.(root)) return root;
       if (hit.object.userData.occluder) return null; // a wall or door is in front
     }
     return null;
