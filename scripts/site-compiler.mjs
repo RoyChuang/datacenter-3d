@@ -29,7 +29,7 @@ const AIRFLOW_SUPPORTED = ['cold-aisle'];
 const AIRFLOW_KNOWN = ['cold-aisle', 'hot-aisle', 'none'];
 // Fields the compiler reads. Anything else is ignored, so it is reported instead of silently dropped.
 const SITE_KEYS = ['id', 'name', 'grid', 'plan', 'wallHeight', 'perimeter', 'mockDevices', 'airflow', 'mock', 'typeRules', 'types',
-  'walls', 'doors', 'rows', 'widths', 'props', 'equipment', 'aisles', 'points', 'power'];
+  'walls', 'doors', 'rows', 'widths', 'ratedKW', 'props', 'equipment', 'aisles', 'points', 'power'];
 const ROW_KEYS = ['id', 'axis', 'line', 'from', 'facing', 'widths', 'units'];
 const PERIMETER_THICKNESS = 0.2; // m
 const AISLE_DOOR_THICKNESS = 0.1; // m
@@ -184,6 +184,7 @@ export function compileSite(site, { devices: realDevices } = {}) {
   }
 
   const power = site.power ? compilePower(site.power, equipment, errors, warnings) : null;
+  const mockRatedKW = resolveRatedKW(site, types.rack, equipment, rowExtents, errors, warnings);
 
   // ---------- outputs ----------
   const strip = ({ type, depth: _d, ...rest }) => rest;
@@ -201,6 +202,7 @@ export function compileSite(site, { devices: realDevices } = {}) {
       plan: site.plan ? { image: site.plan.image, pxPerTile: site.plan.pxPerTile, originPx: site.plan.originPx ?? [0, 0] } : null,
       airflow: AIRFLOW_SUPPORTED.includes(site.airflow) ? site.airflow : null,
       mockHotSpots: site.mock?.hotSpots ?? {},
+      mockRatedKW,
     },
     room: { name: site.name, tileSize: T, width, depth, wallHeight: r3((site.wallHeight ?? 2600) / 1000), walls, doors, containments },
     'equipment-types': runtimeTypes(types),
@@ -275,6 +277,39 @@ function compilePower(power, equipment, errors, warnings) {
   }
 
   return { external: [...external], edges, redundancy, serves, servesAssumed: !!power.servesAssumed };
+}
+
+// Rack power budget (kW, after derating; one feed's worth in A/B setups). Most specific wins:
+// `ratedKW.<rack>` > `ratedKW.<row>` > `types.rack.ratedKW`. Sets `ratedKW` on each rack and returns the
+// demo rating (`mock.ratedKW`) to use instead, which only applies when no rack has a real one.
+function resolveRatedKW(site, rackSpec, equipment, rowExtents, errors, warnings) {
+  const valid = (value, where) => {
+    if (typeof value === 'number' && value > 0) return true;
+    errors.push(`${where}：必須是大於 0 的數字（目前是 ${JSON.stringify(value)}）`);
+    return false;
+  };
+  const racks = equipment.filter((e) => e.type === 'rack');
+  const byKey = {};
+  for (const [key, value] of Object.entries(site.ratedKW ?? {})) {
+    if (!rowExtents.has(key) && !racks.some((r) => r.id === key)) {
+      errors.push(`ratedKW.${key}：沒有這一排或這台機櫃`);
+      continue;
+    }
+    if (valid(value, `ratedKW.${key}`)) byKey[key] = value;
+  }
+  const fallback = rackSpec.ratedKW != null && valid(rackSpec.ratedKW, 'types.rack.ratedKW') ? rackSpec.ratedKW : null;
+  for (const rack of racks) {
+    const rated = byKey[rack.id] ?? byKey[rack.row] ?? fallback;
+    if (rated != null) rack.ratedKW = rated;
+  }
+
+  const rated = racks.filter((r) => r.ratedKW != null).length;
+  const mock = site.mock?.ratedKW;
+  if (mock != null && !valid(mock, 'mock.ratedKW')) return null;
+  if (rated && mock != null) warnings.push('mock.ratedKW：已有真實的額定功率，展示值不使用');
+  if (rated && rated < racks.length) warnings.push(`${racks.length - rated} 台機櫃沒有額定功率（ratedKW），容量視圖的電力模式會顯示為灰色`);
+  if (!rated && mock == null && racks.length) warnings.push('沒有機櫃額定功率（ratedKW），容量視圖的電力模式停用');
+  return rated ? null : mock ?? null;
 }
 
 function cutWall(wall, door) {

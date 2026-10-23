@@ -13,6 +13,7 @@ import { buildHeatmap, SCALE, SCALE_MIN, SCALE_MAX } from './thermal/heatmap.js'
 import { buildAirflow } from './thermal/airflow.js';
 import { buildPoints } from './builders/points.js';
 import { buildPlanOverlay } from './builders/planOverlay.js';
+import { buildCapacity, BANDS } from './capacity/capacity.js';
 import { setupPicker } from './interaction/picker.js';
 import { createPanel } from './ui/panel.js';
 import { startMockLive } from './live/mockLive.js';
@@ -199,6 +200,68 @@ function applyAirflowSelection() {
   airflow?.setFocus(airflowOn() ? picker?.selected?.userData.pick.data.id ?? null : null);
 }
 
+// ---------- capacity ----------
+// Racks fade to a shell and a column inside shows how full each one is, by U space or by power.
+const capacity = buildCapacity(data.racks, data['rack-devices'], types.rack, site.mockRatedKW);
+siteRoot.add(capacity.group);
+layers.capacity = capacity.group;
+const capacityOn = () => capacity.group.visible;
+const hasRating = capacity.totals.ratedRacks > 0;
+let capacityMode = 'space';
+const isRack = (id) => data.racks.some((r) => r.id === id);
+function showCapacity(on) {
+  for (const u of units.values()) setGhost(u.group, on);
+  for (const name of ['sensors', 'cameras', 'containment']) {
+    layers[name].visible = !on && checked(name);
+  }
+  setFade(roomLayers.walls, on ? 0.35 : 1);
+  document.getElementById('capacity-legend').classList.toggle('hidden', !on);
+  if (on) setCapacityMode(capacityMode);
+  if (picker?.selected) panel.refresh(panel.current);
+}
+function setCapacityMode(mode) {
+  capacityMode = mode;
+  capacity.setMode(mode);
+  document.querySelectorAll('[data-capacity]').forEach((b) => b.classList.toggle('active', b.dataset.capacity === mode));
+  document.getElementById('capacity-no-rating').classList.toggle('hidden', mode !== 'power' || capacity.totals.ratedRacks === capacity.totals.racks);
+  stage.requestRender();
+}
+{
+  const t = capacity.totals;
+  const pct = (a, b) => `${Math.round((a / b) * 100)}%`;
+  const scope = t.mock ? '，示意額定' : t.ratedRacks < t.racks ? `，有額定的 ${t.ratedRacks} / ${t.racks} 台` : '';
+  document.getElementById('capacity-totals').innerHTML =
+    `<div>U 位：${t.usedU} / ${t.totalU}U（${pct(t.usedU, t.totalU)}）</div>` +
+    (hasRating
+      ? `<div>電力：${t.kw.toFixed(1)} / ${t.ratedKw} kW（${pct(t.kw, t.ratedKw)}${scope}）</div>` +
+        `<div>擱淺容量：<b>${t.stranded.length}</b> 台機櫃電力已近滿，但 U 位還有四分之一以上空著${t.stranded.length ? `（${t.stranded.join('、')}）` : ''}</div>`
+      : '<div>電力：尚無機櫃額定功率資料</div>');
+  const note = ['柱高 = 使用率；電力 = 設備功耗合計 ÷ 額定功率（可用預算）'];
+  if (t.mock) note.push(`額定功率尚無資料，暫以每櫃 ${site.mockRatedKW} kW 示意`);
+  if (!hasRating) note.push('沒有額定功率，電力模式停用');
+  document.querySelector('#capacity-legend .legend-note').textContent = note.join('。');
+  const powerBtn = document.querySelector('[data-capacity="power"]');
+  powerBtn.disabled = !hasRating;
+  if (!hasRating) powerBtn.title = '尚無機櫃額定功率（site.yaml 的 ratedKW）';
+}
+document.getElementById('capacity-bands').innerHTML = BANDS
+  .map(([, color, label]) => `<div class="legend-row"><span class="swatch block" style="background:${color}"></span>${label}</div>`).join('') +
+  '<div class="legend-row hidden" id="capacity-no-rating"><span class="swatch block" style="background:#9ca3af"></span>無額定功率</div>';
+document.querySelectorAll('[data-capacity]').forEach((b) => b.addEventListener('click', () => setCapacityMode(b.dataset.capacity)));
+function capacitySection(id) {
+  if (!capacityOn() || !isRack(id)) return '';
+  const u = capacity.usageOf(id);
+  const pct = (f) => `${Math.round(f * 100)}%`;
+  const power = u.ratedKW
+    ? `${u.kw.toFixed(2)} / ${u.ratedKW} kW（${pct(u.power)}）${capacity.totals.mock ? ' <span class="muted">示意額定</span>' : ''}`
+    : `${u.kw.toFixed(2)} kW <span class="muted">無額定功率</span>`;
+  return `<div class="section-title">容量</div><table>` +
+    `<tr><td>U 位</td><td>${u.usedU} / ${u.totalU}U（${pct(u.space)}）</td></tr>` +
+    `<tr><td>電力</td><td>${power}</td></tr>` +
+    (u.stranded ? '<tr><td></td><td><span class="badge warn">擱淺：電力將滿、空間仍有餘</span></td></tr>' : '') +
+    '</table>';
+}
+
 const planUrl = site.plan && planImages[`../sites/${siteId}/${site.plan.image}`];
 if (planUrl) {
   layers.plan = buildPlanOverlay(planUrl, site.plan, room.tileSize, rackTop + 0.1, stage.requestRender);
@@ -223,7 +286,7 @@ function unitOf(object) {
 }
 function clearCutaway() {
   // back to whatever the active analysis view wants
-  for (const g of cutaway) setGhost(g, heatOn() || (airflowOn() && !isCooler(g.name)));
+  for (const g of cutaway) setGhost(g, heatOn() || capacityOn() || (airflowOn() && !isCooler(g.name)));
   cutaway = [];
 }
 // Boxes the camera must not end up inside (equipment and solid walls), computed once.
@@ -257,7 +320,7 @@ function frontView(object, face, front) {
 
 const panel = createPanel(document.getElementById('panel'), {
   onClose: () => picker.select(null),
-  extra: (pick) => powerLayer?.section(pick.data.id) ?? '',
+  extra: (pick) => (powerLayer?.section(pick.data.id) ?? '') + capacitySection(pick.data.id),
 });
 const picker = setupPicker({
   camera,
@@ -304,7 +367,9 @@ startMockLive(data.points, (id, reading) => {
 
 // ---------- toolbar ----------
 // Analysis views each take over the scene, so only one can be on at a time.
-const ANALYSIS = { power: (on) => showPower(on), heat: (on) => showHeat(on), airflow: (on) => showAirflow(on) };
+const ANALYSIS = {
+  power: (on) => showPower(on), heat: (on) => showHeat(on), airflow: (on) => showAirflow(on), capacity: (on) => showCapacity(on),
+};
 document.querySelectorAll('[data-layer]').forEach((input) => {
   const name = input.dataset.layer;
   const layer = layers[name];

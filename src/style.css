@@ -76,4 +76,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .legend-title { font-weight: 600; margin-bottom: 6px; }
 .heat-bar { height: 10px; border-radius: 3px; }
 .heat-ticks { display: flex; justify-content: space-between; color: var(--muted); margin-top: 3px; }
+#capacity-legend { left: 12px; bottom: 12px; font-size: 12px; width: min(280px, calc(100vw - 24px)); }
+#capacity-legend button.active { background: #1f2937; color: #fff; border-color: #1f2937; }
+#capacity-legend button:disabled { opacity: 0.45; cursor: not-allowed; }
+.swatch.block { height: 10px; width: 14px; }
+.capacity-totals { margin-top: 8px; display: grid; gap: 3px; }
 #airflow-legend { left: 12px; bottom: 12px; font-size: 12px; width: min(280px, calc(100vw - 24px)); }
